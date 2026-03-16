@@ -15,6 +15,7 @@ import VerifyEmailPage    from './pages/auth/VerifyEmailPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import ResetPasswordPage  from './pages/auth/ResetPasswordPage';
 import ChangePasswordPage from './pages/auth/ChangePasswordPage';
+import LandingPage from './pages/LandingPage';
 
 // Dashboard pages
 import CustomerDashboard from './pages/dashboard/CustomerDashboard';
@@ -131,8 +132,11 @@ const App = () => {
             }
           />
 
+         {/* ── Landing page ── */}
+          <Route path="/home" element={<LandingPage />} />
+
           {/* ── Default redirect ── */}
-          <Route path="/"  element={<Navigate to="/auth/login" replace />} />
+          <Route path="/"  element={<Navigate to="/home" replace />} />
           <Route path="*"  element={<Navigate to="/auth/login" replace />} />
         </Routes>
       </AuthProvider>
