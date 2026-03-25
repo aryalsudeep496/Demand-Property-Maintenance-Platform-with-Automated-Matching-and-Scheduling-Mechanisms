@@ -9,6 +9,7 @@ import {
 } from './components/auth/ProtectedRoute';
 
 // Auth pages
+import ResendVerificationPage from './pages/auth/ResendVerificationPage';
 import RegisterPage       from './pages/auth/RegisterPage';
 import LoginPage          from './pages/auth/LoginPage';
 import VerifyEmailPage    from './pages/auth/VerifyEmailPage';
@@ -84,7 +85,7 @@ const App = () => {
 
           {/* ── Email verification ── */}
           <Route path="/auth/verify-email/:token" element={<VerifyEmailPage />} />
-          <Route path="/auth/resend-verification"  element={<PlaceholderPage title="Resend Verification" />} />
+          <Route path="/auth/resend-verification" element={<ResendVerificationPage />} />
 
           {/* ── Customer dashboard ── */}
           <Route

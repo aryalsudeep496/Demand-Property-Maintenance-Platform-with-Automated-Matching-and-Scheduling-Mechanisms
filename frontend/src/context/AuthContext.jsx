@@ -3,11 +3,11 @@ import { authAPI } from '../utils/api';
 
 // ─── Initial State ─────────────────────────────────────────────────────────────
 const initialState = {
-  user:          null,
-  accessToken:   localStorage.getItem('accessToken') || null,
-  isLoading:     true,  // True on mount while we verify the token
+  user:            null,
+  accessToken:     localStorage.getItem('accessToken') || null,
+  isLoading:       true,
   isAuthenticated: false,
-  error:         null,
+  error:           null,
 };
 
 // ─── Reducer ───────────────────────────────────────────────────────────────────
@@ -37,11 +37,7 @@ const authReducer = (state, action) => {
       };
 
     case 'LOGOUT':
-      return {
-        ...initialState,
-        isLoading: false,
-        accessToken: null,
-      };
+      return { ...initialState, isLoading: false, accessToken: null };
 
     case 'UPDATE_USER':
       return { ...state, user: { ...state.user, ...action.payload } };
@@ -63,7 +59,7 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // ── Bootstrap: verify token on mount ────────────────────────────────────────
+  // ── Bootstrap: verify stored token on app load ────────────────────────────
   useEffect(() => {
     const bootstrapAuth = async () => {
       const token = localStorage.getItem('accessToken');
@@ -71,7 +67,6 @@ export const AuthProvider = ({ children }) => {
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
-
       try {
         const { data } = await authAPI.getMe();
         dispatch({
@@ -79,35 +74,26 @@ export const AuthProvider = ({ children }) => {
           payload: { user: data.data, accessToken: token },
         });
       } catch {
-        // Token invalid or expired – clear storage
         localStorage.removeItem('accessToken');
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     };
-
     bootstrapAuth();
   }, []);
 
-  // ── Register ─────────────────────────────────────────────────────────────────
+  // ── Register ──────────────────────────────────────────────────────────────
   const register = useCallback(async (formData) => {
-    dispatch({ type: 'AUTH_LOADING' });
-    try {
-      const payload = { ...formData, agreeToTerms: String(formData.agreeToTerms) };
-      const { data } = await authAPI.register(payload);
-      dispatch({ type: 'SET_LOADING', payload: false });
-      return { success: true, data: data.data, message: data.message };
-    } catch (error) {
-      const msg = error.response?.data?.message || 'Registration failed.';
-      dispatch({ type: 'AUTH_ERROR', payload: msg });
-      return {
-        success: false,
-        message: msg,
-        errors:  error.response?.data?.errors || {},
-      };
-    }
-  }, []);
+  try {
+    const { data } = await authAPI.register(formData);
+    return { success: true, data: data.data, message: data.message };
+  } catch (error) {
+    const msg    = error.response?.data?.message || 'Registration failed.';
+    const errors = error.response?.data?.errors  || {};
+    return { success: false, message: msg, errors };
+  }
+}, []);
 
-  // ── Login ────────────────────────────────────────────────────────────────────
+  // ── Login ─────────────────────────────────────────────────────────────────
   const login = useCallback(async (credentials) => {
     dispatch({ type: 'AUTH_LOADING' });
     try {
@@ -119,15 +105,15 @@ export const AuthProvider = ({ children }) => {
       });
       return { success: true, user: data.user };
     } catch (error) {
-      const msg    = error.response?.data?.message || 'Login failed.';
-      const code   = error.response?.data?.code;
+      const msg     = error.response?.data?.message || 'Login failed.';
+      const code    = error.response?.data?.code;
       const errData = error.response?.data?.data;
       dispatch({ type: 'AUTH_ERROR', payload: msg });
       return { success: false, message: msg, code, data: errData };
     }
   }, []);
 
-  // ── Logout ───────────────────────────────────────────────────────────────────
+  // ── Logout ────────────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
     try {
       await authAPI.logout();
@@ -139,7 +125,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // ── Forgot Password ───────────────────────────────────────────────────────────
+  // ── Forgot Password ───────────────────────────────────────────────────────
   const forgotPassword = useCallback(async (email) => {
     try {
       const { data } = await authAPI.forgotPassword(email);
@@ -152,7 +138,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // ── Reset Password ────────────────────────────────────────────────────────────
+  // ── Reset Password ────────────────────────────────────────────────────────
   const resetPassword = useCallback(async (token, formData) => {
     try {
       const { data } = await authAPI.resetPassword(token, formData);
@@ -166,7 +152,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // ── Update user data (after profile edit) ────────────────────────────────────
+  // ── Update user (after profile edit) ─────────────────────────────────────
   const updateUser = useCallback((userData) => {
     dispatch({ type: 'UPDATE_USER', payload: userData });
   }, []);

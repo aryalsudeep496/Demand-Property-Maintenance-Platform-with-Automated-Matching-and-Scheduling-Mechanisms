@@ -1,13 +1,5 @@
 const { body, param } = require('express-validator');
 
-const passwordSchema = body('password')
-  .notEmpty().withMessage('Password is required')
-  .isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
-  .matches(/[A-Z]/).withMessage('Must contain at least one uppercase letter')
-  .matches(/[a-z]/).withMessage('Must contain at least one lowercase letter')
-  .matches(/\d/).withMessage('Must contain at least one number')
-  .matches(/[@$!%*?&#^()_\-+=[\]{}|;:,.<>]/).withMessage('Must contain at least one special character');
-
 const validateRegister = [
   body('firstName')
     .trim()
@@ -48,10 +40,19 @@ const validateRegister = [
     .optional()
     .isIn(['customer', 'provider']).withMessage('Role must be customer or provider'),
 
+  // ── Phone: optional, flexible format, accepts +44, spaces, dashes, brackets ──
   body('phone')
     .optional({ nullable: true, checkFalsy: true })
     .trim()
-    .isMobilePhone('any', { strictMode: false }).withMessage('Please enter a valid phone number'),
+    .custom((value) => {
+      if (!value) return true;
+      // Strip all formatting characters before checking digit count
+      const digitsOnly = value.replace(/[\s\-().+]/g, '');
+      if (!/^\d{7,15}$/.test(digitsOnly)) {
+        throw new Error('Please enter a valid phone number (7–15 digits, e.g. +44 7700 900000)');
+      }
+      return true;
+    }),
 
   body('agreeToTerms')
     .custom((value) => {

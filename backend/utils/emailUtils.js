@@ -13,35 +13,39 @@ const createTransporter = () => {
 };
 
 const emailTemplates = {
-  verifyEmail: (name, verifyUrl) => ({
-    subject: 'Verify Your Email – PropMaintain',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9f9f9;">
-        <div style="background: #1a3c5e; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-          <h1 style="color: #ffffff; margin: 0; font-size: 24px;">PropMaintain</h1>
-        </div>
-        <div style="background: #ffffff; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e0e0e0;">
-          <h2 style="color: #1a3c5e;">Hello, ${name}!</h2>
-          <p style="color: #555; line-height: 1.6;">
-            Thank you for registering on PropMaintain. Please verify your email address to activate your account.
-          </p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${verifyUrl}"
-               style="background: #e67e22; color: white; padding: 14px 32px; text-decoration: none;
-                      border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block;">
-              Verify Email Address
-            </a>
-          </div>
-          <p style="color: #888; font-size: 13px;">
-            This link expires in <strong>24 hours</strong>. If you did not create this account, you can safely ignore this email.
-          </p>
-          <p style="color: #888; font-size: 12px; word-break: break-all;">
-            Or copy this URL: <a href="${verifyUrl}" style="color: #1a3c5e;">${verifyUrl}</a>
-          </p>
-        </div>
+verifyEmail: (name, verifyUrl) => ({
+  subject: 'Verify Your Email – PropMaintain',
+  html: `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9f9f9;">
+      <div style="background: #1a3c5e; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
+        <h1 style="color: #ffffff; margin: 0; font-size: 24px;">PropMaintain</h1>
       </div>
-    `,
-  }),
+      <div style="background: #ffffff; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e0e0e0;">
+        <h2 style="color: #1a3c5e;">Hello, ${name}!</h2>
+        <p style="color: #555; line-height: 1.6;">
+          Thank you for registering on PropMaintain. Please verify your email address to activate your account.
+        </p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${verifyUrl}"
+             rel="noopener noreferrer"
+             style="background: #e67e22; color: white; padding: 14px 32px; text-decoration: none;
+                    border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block;">
+            Verify Email Address
+          </a>
+        </div>
+        <p style="color: #888; font-size: 13px;">
+          This link expires in <strong>24 hours</strong>. If you did not create this account, you can safely ignore this email.
+        </p>
+        <p style="color: #555; font-size: 13px;">
+          Or copy and paste this URL into your browser:
+        </p>
+        <p style="color: #888; font-size: 12px; word-break: break-all; background: #f5f5f5; padding: 10px; border-radius: 4px;">
+          ${verifyUrl}
+        </p>
+      </div>
+    </div>
+  `,
+}),
 
   resetPassword: (name, resetUrl) => ({
     subject: 'Reset Your Password – PropMaintain',

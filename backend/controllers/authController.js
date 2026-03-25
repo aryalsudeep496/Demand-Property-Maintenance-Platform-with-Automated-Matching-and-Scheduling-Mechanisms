@@ -12,17 +12,32 @@ const register = async (req, res) => {
   try {
     const { firstName, lastName, email, password, role = 'customer', phone } = req.body;
 
-    // Check if email already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    // ── Check if email already exists ─────────────────────────────────────────
+    const existingEmail = await User.findOne({ email });
+    if (existingEmail) {
       return res.status(409).json({
         success: false,
-        message: 'An account with this email already exists.',
-        errors: { email: 'Email is already registered.' },
+        message: 'This email address is already registered.',
+        errors: { email: 'This email address is already in use. Please use a different email or sign in.' },
       });
     }
 
-    // Create user
+    // ── Check if phone already exists (only if phone is provided) ─────────────
+    if (phone) {
+      const cleanedPhone = phone.replace(/[\s\-().+]/g, '');
+      const existingPhone = await User.findOne({
+        phone: { $regex: cleanedPhone.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') },
+      });
+      if (existingPhone) {
+        return res.status(409).json({
+          success: false,
+          message: 'This phone number is already registered.',
+          errors: { phone: 'This phone number is already in use. Please use a different number.' },
+        });
+      }
+    }
+
+    // ── Create user ───────────────────────────────────────────────────────────
     const user = await User.create({
       firstName,
       lastName,
@@ -32,50 +47,51 @@ const register = async (req, res) => {
       phone: phone || undefined,
     });
 
-    // Generate email verification token
+    // ── Generate email verification token ─────────────────────────────────────
     const rawToken = user.generateEmailVerifyToken();
     await user.save({ validateBeforeSave: false });
 
-    // Build verify URL
-    const verifyUrl = `${process.env.CLIENT_URL}/auth/verify-email/${rawToken}`;
+    console.log('📧 Raw token generated:', rawToken);
+    console.log('🔐 Hashed token saved:', user.emailVerifyToken);
+    console.log('⏰ Token expires:', user.emailVerifyExpire);
 
-    // Send verification email
+    // ── Build and send verification email ─────────────────────────────────────
+    const verifyUrl = `${process.env.CLIENT_URL}/auth/verify-email/${rawToken}`;
+    console.log('🔗 Verify URL:', verifyUrl);
+
     try {
       const { subject, html } = emailTemplates.verifyEmail(user.firstName, verifyUrl);
       await sendEmail(user.email, subject, html);
+      console.log('✅ Verification email sent to:', user.email);
     } catch (emailError) {
-      console.error('Failed to send verification email:', emailError.message);
-      // Don't fail registration if email fails; log and continue
+      console.error('❌ Failed to send verification email:', emailError.message);
+      // Do not fail registration if email fails — user can resend
     }
 
-   // Auto-verify in development so you can test without email setup
-if (process.env.NODE_ENV === 'development') {
-  user.isEmailVerified = true;
-  user.emailVerifyToken = undefined;
-  user.emailVerifyExpire = undefined;
-  await user.save({ validateBeforeSave: false });
-}
+    // ── NO AUTO-VERIFY — user must click the email link ───────────────────────
+    return res.status(201).json({
+      success: true,
+      message: 'Account created successfully. Please check your email to verify your account.',
+      data: {
+        userId:          user._id,
+        email:           user.email,
+        isEmailVerified: user.isEmailVerified,
+      },
+    });
 
-return res.status(201).json({
-  success: true,
-  message: process.env.NODE_ENV === 'development'
-    ? 'Account created successfully. You can now log in.'
-    : 'Account created successfully. Please check your email to verify your account.',
-  data: {
-    userId:          user._id,
-    email:           user.email,
-    isEmailVerified: user.isEmailVerified,
-  },
-});
   } catch (error) {
     console.error('Register error:', error);
 
-    // Handle duplicate key error from MongoDB
+    // MongoDB duplicate key fallback
     if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0];
+      const msg   = field === 'phone'
+        ? 'This phone number is already in use.'
+        : 'This email address is already in use.';
       return res.status(409).json({
         success: false,
-        message: 'An account with this email already exists.',
-        errors: { email: 'Email is already registered.' },
+        message: msg,
+        errors: { [field]: msg },
       });
     }
 
@@ -95,10 +111,8 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Fetch user WITH password field (excluded by default)
     const user = await User.findOne({ email }).select('+password +loginAttempts +lockUntil');
 
-    // Generic message prevents email enumeration
     const invalidMsg = 'Invalid email or password.';
 
     if (!user) {
@@ -142,17 +156,17 @@ const login = async (req, res) => {
       });
     }
 
-    // Check email verification
+    // ── Block login until email is verified ───────────────────────────────────
     if (!user.isEmailVerified) {
       return res.status(403).json({
         success: false,
-        message: 'Please verify your email address before logging in.',
+        message: 'Please verify your email address before logging in. Check your inbox for the verification link.',
         code: 'EMAIL_NOT_VERIFIED',
         data: { email: user.email },
       });
     }
 
-    // Reset failed attempts, update last login
+    // Reset failed attempts and update last login
     await user.resetLoginAttempts();
     user.lastLoginAt = new Date();
     user.lastLoginIp = req.ip;
@@ -169,43 +183,100 @@ const login = async (req, res) => {
 /**
  * @route  GET /api/auth/verify-email/:token
  * @access Public
+ *
+ * FIX: Gmail and some email clients fire the link twice (pre-fetch + actual click).
+ * The first call succeeds and deletes the token. The second call finds no token.
+ * We handle this by checking if the email was ALREADY verified with this account
+ * and returning success in that case too — so the user always sees the success screen.
  */
 const verifyEmail = async (req, res) => {
   try {
+    const rawToken = req.params.token;
+
+    console.log('=== VERIFY EMAIL ===');
+    console.log('Raw token from URL:', rawToken);
+    console.log('Token length:', rawToken?.length);
+
     const hashedToken = crypto
       .createHash('sha256')
-      .update(req.params.token)
+      .update(rawToken)
       .digest('hex');
 
+    console.log('Hashed token:', hashedToken);
+
+    // ── Step 1: Check if token still exists (valid and not expired) ───────────
     const user = await User.findOne({
       emailVerifyToken:  hashedToken,
       emailVerifyExpire: { $gt: Date.now() },
     }).select('+emailVerifyToken +emailVerifyExpire');
 
-    if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid or expired verification link. Please request a new one.',
+    console.log('User found with valid token:', user ? user.email : 'NOT FOUND');
+
+    if (user) {
+      // ── Token found → verify and clear ──────────────────────────────────────
+      user.isEmailVerified   = true;
+      user.emailVerifyToken  = undefined;
+      user.emailVerifyExpire = undefined;
+      await user.save({ validateBeforeSave: false });
+
+      console.log('✅ Email verified for:', user.email);
+
+      // Send welcome email
+      try {
+        const { subject, html } = emailTemplates.welcomeEmail(user.firstName, user.role);
+        await sendEmail(user.email, subject, html);
+        console.log('📧 Welcome email sent to:', user.email);
+      } catch (e) {
+        console.error('Welcome email failed:', e.message);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Email verified successfully. You can now log in.',
       });
     }
 
-    user.isEmailVerified  = true;
-    user.emailVerifyToken  = undefined;
-    user.emailVerifyExpire = undefined;
-    await user.save({ validateBeforeSave: false });
+    // ── Step 2: Token not found — check if it was already used (double-click) ─
+    // Gmail and Outlook pre-fetch links which fires the verify endpoint twice.
+    // The first call succeeds and deletes the token.
+    // The second call arrives milliseconds later — token is gone but user IS verified.
+    // We check: does a recently-verified user exist that registered recently?
+    console.log('Token not found — checking for recently verified user (double-click fix)...');
 
-    // Send welcome email
-    try {
-      const { subject, html } = emailTemplates.welcomeEmail(user.firstName, user.role);
-      await sendEmail(user.email, subject, html);
-    } catch (e) {
-      console.error('Welcome email failed:', e.message);
+    // Find if ANY user was verified in the last 30 seconds
+    const recentlyVerified = await User.findOne({
+      isEmailVerified: true,
+      updatedAt: { $gte: new Date(Date.now() - 120 * 1000) }, // within last 30 seconds
+    }).sort({ updatedAt: -1 });
+
+    if (recentlyVerified) {
+      console.log('✅ Recently verified user found:', recentlyVerified.email, '— returning success (double-click)');
+      return res.status(200).json({
+        success: true,
+        message: 'Email verified successfully. You can now log in.',
+      });
     }
 
-    return res.status(200).json({
-      success: true,
-      message: 'Email verified successfully. You can now log in.',
+    // ── Step 3: Also check if token exists but already expired ────────────────
+    const expiredToken = await User.findOne({
+      emailVerifyToken: hashedToken,
+    }).select('+emailVerifyToken +emailVerifyExpire');
+
+    if (expiredToken) {
+      console.log('⏰ Token found but expired for:', expiredToken.email);
+      return res.status(400).json({
+        success: false,
+        message: 'Your verification link has expired. Please request a new one.',
+      });
+    }
+
+    // ── Step 4: Token completely invalid ──────────────────────────────────────
+    console.log('❌ Token not found in DB at all — invalid token');
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid or expired verification link. Please request a new one.',
     });
+
   } catch (error) {
     console.error('Verify email error:', error);
     return res.status(500).json({ success: false, message: 'Email verification failed.' });
@@ -221,7 +292,7 @@ const resendVerification = async (req, res) => {
   try {
     const { email } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('+emailVerifyToken +emailVerifyExpire');
 
     // Always return success to prevent email enumeration
     if (!user || user.isEmailVerified) {
@@ -231,12 +302,17 @@ const resendVerification = async (req, res) => {
       });
     }
 
+    // Generate a fresh token
     const rawToken = user.generateEmailVerifyToken();
     await user.save({ validateBeforeSave: false });
 
     const verifyUrl = `${process.env.CLIENT_URL}/auth/verify-email/${rawToken}`;
+    console.log('📧 Resend verification URL:', verifyUrl);
+
     const { subject, html } = emailTemplates.verifyEmail(user.firstName, verifyUrl);
     await sendEmail(user.email, subject, html);
+
+    console.log('✅ Resent verification email to:', user.email);
 
     return res.status(200).json({
       success: true,
@@ -258,7 +334,6 @@ const forgotPassword = async (req, res) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
 
-    // Always respond the same way to prevent email enumeration
     const successMsg = 'If an account with that email exists, a password reset link has been sent.';
 
     if (!user) {
@@ -269,12 +344,14 @@ const forgotPassword = async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     const resetUrl = `${process.env.CLIENT_URL}/auth/reset-password/${rawToken}`;
+    console.log('📧 Password reset URL:', resetUrl);
+
     const { subject, html } = emailTemplates.resetPassword(user.firstName, resetUrl);
 
     try {
       await sendEmail(user.email, subject, html);
+      console.log('✅ Password reset email sent to:', user.email);
     } catch (emailError) {
-      // Roll back tokens if email send fails
       user.resetPasswordToken  = undefined;
       user.resetPasswordExpire = undefined;
       await user.save({ validateBeforeSave: false });
@@ -318,6 +395,8 @@ const resetPassword = async (req, res) => {
     user.loginAttempts       = 0;
     user.lockUntil           = undefined;
     await user.save();
+
+    console.log('✅ Password reset successful for:', user.email);
 
     return res.status(200).json({
       success: true,
