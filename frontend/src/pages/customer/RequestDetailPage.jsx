@@ -1,0 +1,548 @@
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { requestsAPI } from '../../utils/requestsAPI';
+import { StatusBadge, UrgencyBadge, CategoryBadge, StarRating } from '../../components/common/StatusBadge';
+
+const CUSTOMER_NAV = [
+  { to: '/dashboard',            label: 'Home',        icon: '🏠' },
+  { to: '/customer/request/new', label: 'New Request', icon: '➕' },
+  { to: '/customer/requests',    label: 'My Requests', icon: '📋' },
+];
+const PROVIDER_NAV = [
+  { to: '/provider/dashboard', label: 'Home',      icon: '🏠' },
+  { to: '/provider/requests',  label: 'My Jobs',   icon: '📋' },
+  { to: '/provider/available', label: 'Available', icon: '🔍' },
+  { to: '/provider/profile',   label: 'Profile',   icon: '👤' },
+];
+const ADMIN_NAV = [
+  { to: '/admin/dashboard', label: 'Dashboard', icon: '🏠' },
+  { to: '/admin/users',     label: 'Users',     icon: '👥' },
+  { to: '/admin/requests',  label: 'Requests',  icon: '📋' },
+];
+
+const formatDate = (d) =>
+  new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+const formatTime = (d) =>
+  new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+const formatDateTime = (d) =>
+  `${formatDate(d)} at ${formatTime(d)}`;
+
+// ─── Section card wrapper ──────────────────────────────────────────────────────
+const Card = ({ children, style = {} }) => (
+  <div style={{
+    background:   '#fff',
+    borderRadius: '12px',
+    padding:      '20px',
+    border:       '1px solid #e8ecf0',
+    boxShadow:    '0 2px 8px rgba(0,0,0,0.05)',
+    ...style,
+  }}>
+    {children}
+  </div>
+);
+
+const SectionTitle = ({ children }) => (
+  <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#8a9bb0', textTransform: 'uppercase', letterSpacing: '0.6px', margin: '0 0 14px', fontFamily: "'Outfit', sans-serif" }}>
+    {children}
+  </h3>
+);
+
+// ─── Main component ────────────────────────────────────────────────────────────
+const RequestDetailPage = () => {
+  const { id }       = useParams();
+  const { user }     = useAuth();
+  const location     = useLocation();
+  const navigate     = useNavigate();
+  const chatEndRef   = useRef(null);
+
+  const [request,     setRequest]     = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [notFound,    setNotFound]    = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [message,     setMessage]     = useState('');
+  const [sending,     setSending]     = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [showReview,  setShowReview]  = useState(false);
+  const [rating,      setRating]      = useState(0);
+  const [comment,     setComment]     = useState('');
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [successMsg,  setSuccessMsg]  = useState(location.state?.successMsg || '');
+  const [errorMsg,    setErrorMsg]    = useState('');
+
+  const fetchRequest = useCallback(async () => {
+    try {
+      const res = await requestsAPI.getById(id);
+      setRequest(res.data.data);
+    } catch (err) {
+      if (err.response?.status === 404) setNotFound(true);
+      else if (err.response?.status === 403) setAccessDenied(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => { fetchRequest(); }, [fetchRequest]);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [request?.messages]);
+
+  // ── Send message ─────────────────────────────────────────────────────────────
+  const handleSendMessage = async () => {
+    if (!message.trim()) return;
+    setSending(true);
+    try {
+      await requestsAPI.sendMessage(id, message.trim());
+      setMessage('');
+      fetchRequest();
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Failed to send message.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // ── Update status ────────────────────────────────────────────────────────────
+  const handleStatusUpdate = async (status, note = '') => {
+    setActionLoading(true);
+    setErrorMsg('');
+    try {
+      await requestsAPI.updateStatus(id, { status, note });
+      setSuccessMsg(`Request status updated to "${status}".`);
+      fetchRequest();
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Failed to update status.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // ── Submit review ────────────────────────────────────────────────────────────
+  const handleSubmitReview = async () => {
+    if (!rating) { setErrorMsg('Please select a rating.'); return; }
+    setReviewLoading(true);
+    setErrorMsg('');
+    try {
+      await requestsAPI.submitReview(id, { rating, comment });
+      setSuccessMsg('Review submitted successfully!');
+      setShowReview(false);
+      fetchRequest();
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Failed to submit review.');
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
+  // ── Loading / not found states ────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Outfit', sans-serif" }}>
+        <div style={{ textAlign: 'center', color: '#8a9bb0' }}>
+          <div style={{ width: '40px', height: '40px', border: '4px solid #e8ecf0', borderTop: '4px solid #C17B2A', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 16px' }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          Loading request…
+        </div>
+      </div>
+    );
+  }
+
+  const backLink = user?.role === 'admin'
+    ? '/admin/requests'
+    : user?.role === 'provider'
+    ? '/provider/requests'
+    : '/customer/requests';
+  const backLabel = user?.role === 'admin'
+    ? 'All Requests'
+    : user?.role === 'provider'
+    ? 'My Jobs'
+    : 'My Requests';
+
+  if (accessDenied) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Outfit', sans-serif" }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚫</div>
+          <h2 style={{ color: '#1a2e44', marginBottom: '8px' }}>Access denied</h2>
+          <p style={{ color: '#6b7c93', marginBottom: '16px', fontSize: '14px' }}>You don't have permission to view this request.</p>
+          <Link to={backLink} style={{ color: '#C17B2A', fontWeight: '600' }}>← Back to {backLabel}</Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (notFound || !request) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#f0f4f8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Outfit', sans-serif" }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+          <h2 style={{ color: '#1a2e44', marginBottom: '8px' }}>Request not found</h2>
+          <Link to={backLink} style={{ color: '#C17B2A', fontWeight: '600' }}>← Back to {backLabel}</Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Derive permissions ────────────────────────────────────────────────────────
+  const navLinks    = user?.role === 'admin' ? ADMIN_NAV : user?.role === 'provider' ? PROVIDER_NAV : CUSTOMER_NAV;
+  const isAdmin     = user?.role === 'admin';
+  const isCustomer  = request.customer?._id === user?._id || request.customer === user?._id;
+  const isProvider  = request.provider && (request.provider?._id === user?._id || request.provider === user?._id);
+  const canCancel   = isCustomer && ['pending', 'matched', 'scheduled'].includes(request.status);
+  const canStart    = isProvider && ['matched', 'scheduled'].includes(request.status);
+  const canComplete = isProvider && request.status === 'in_progress';
+  const canChat     = !['pending', 'cancelled'].includes(request.status) && request.provider;
+  const canReview   = isCustomer && request.status === 'completed' && !request.customerReview;
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f0f4f8', fontFamily: "'Outfit', sans-serif" }}>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* ── Navbar ── */}
+      <nav style={{ height: '60px', background: '#1a3c5e', display: 'flex', alignItems: 'center', padding: '0 28px', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
+        <Link to="/home" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
+          <span style={{ fontSize: '20px' }}>🏠</span>
+          <span style={{ fontSize: '16px', fontWeight: '800', color: '#fff' }}>PropMaintain</span>
+        </Link>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          {navLinks.map(({ to, label, icon }) => (
+            <Link key={to} to={to} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', borderRadius: '6px', textDecoration: 'none', fontSize: '13px', fontWeight: '500', color: 'rgba(255,255,255,0.7)', background: 'transparent' }}>
+              {icon} {label}
+            </Link>
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {isAdmin && (
+            <span style={{ display: 'inline-block', padding: '3px 10px', background: '#C17B2A', borderRadius: '20px', fontSize: '11px', fontWeight: '800', color: '#fff' }}>ADMIN</span>
+          )}
+          <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>👋 {user?.firstName}</span>
+        </div>
+      </nav>
+
+      <div style={{ maxWidth: '1000px', margin: '28px auto', padding: '0 20px' }}>
+
+        {/* ── Back link + title ── */}
+        <div style={{ marginBottom: '20px' }}>
+          <Link to={backLink} style={{ fontSize: '13px', color: '#6b7c93', textDecoration: 'none', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px', marginBottom: '10px' }}>
+            ← {backLabel}
+          </Link>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: '22px', fontWeight: '800', color: '#0d2137', margin: 0, flex: 1 }}>{request.title}</h1>
+            <StatusBadge status={request.status} />
+          </div>
+        </div>
+
+        {/* ── Alert banners ── */}
+        {successMsg && (
+          <div style={{ background: '#d4edda', border: '1px solid #c3e6cb', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '14px', color: '#155724', fontWeight: '600' }}>✅ {successMsg}</span>
+            <button onClick={() => setSuccessMsg('')} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#155724' }}>×</button>
+          </div>
+        )}
+        {errorMsg && (
+          <div style={{ background: '#fff0f0', border: '1px solid #fcd0d0', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#c0392b' }}>⚠ {errorMsg}</span>
+            <button onClick={() => setErrorMsg('')} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#c0392b' }}>×</button>
+          </div>
+        )}
+
+        {/* ── Two-column layout ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '20px', alignItems: 'start' }}>
+
+          {/* ── LEFT COLUMN ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+            {/* Request details */}
+            <Card>
+              <SectionTitle>Request Details</SectionTitle>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
+                <CategoryBadge category={request.category} />
+                <UrgencyBadge  urgency={request.urgency} />
+                <span style={{ fontSize: '12px', color: '#8a9bb0', display: 'flex', alignItems: 'center' }}>
+                  🗓 {formatDate(request.createdAt)}
+                </span>
+              </div>
+              <p style={{ fontSize: '14px', lineHeight: 1.7, color: '#4a5568', margin: '0 0 14px', whiteSpace: 'pre-wrap' }}>
+                {request.description}
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {[
+                  ['📍 Address',    `${request.location?.address}, ${request.location?.city} ${request.location?.postcode}`],
+                  ['🔧 Service',    request.serviceType],
+                  request.preferredDate && ['📅 Preferred',  formatDate(request.preferredDate)],
+                  request.scheduledDate && ['📅 Scheduled',  formatDateTime(request.scheduledDate)],
+                  request.completedAt   && ['✅ Completed',  formatDateTime(request.completedAt)],
+                  request.cancelReason  && ['❌ Reason',     request.cancelReason],
+                ].filter(Boolean).map(([k, v]) => (
+                  <div key={k} style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #f0f4f8' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#8a9bb0', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>{k}</div>
+                    <div style={{ fontSize: '13px', color: '#1a2e44', fontWeight: '500' }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* Action buttons */}
+            {(canCancel || canStart || canComplete) && (
+              <Card>
+                <SectionTitle>Actions</SectionTitle>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {canStart && (
+                    <button
+                      onClick={() => handleStatusUpdate('in_progress')}
+                      disabled={actionLoading}
+                      style={{ padding: '10px 20px', background: '#27ae60', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: "'Outfit', sans-serif", opacity: actionLoading ? 0.6 : 1 }}
+                    >
+                      🔧 Start Job
+                    </button>
+                  )}
+                  {canComplete && (
+                    <button
+                      onClick={() => handleStatusUpdate('completed')}
+                      disabled={actionLoading}
+                      style={{ padding: '10px 20px', background: '#1a3c5e', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: "'Outfit', sans-serif", opacity: actionLoading ? 0.6 : 1 }}
+                    >
+                      ✅ Mark as Complete
+                    </button>
+                  )}
+                  {canCancel && (
+                    <button
+                      onClick={() => handleStatusUpdate('cancelled', 'Cancelled by customer')}
+                      disabled={actionLoading}
+                      style={{ padding: '10px 20px', background: '#fff', border: '1.5px solid #e74c3c', borderRadius: '8px', color: '#e74c3c', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: "'Outfit', sans-serif", opacity: actionLoading ? 0.6 : 1 }}
+                    >
+                      ❌ Cancel Request
+                    </button>
+                  )}
+                </div>
+              </Card>
+            )}
+
+            {/* Chat */}
+            <Card style={{ padding: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #f0f4f8' }}>
+                <SectionTitle>💬 Messages</SectionTitle>
+              </div>
+
+              {/* Messages area */}
+              <div style={{ height: '300px', overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', background: '#fafbfc' }}>
+                {!canChat ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8a9bb0', fontSize: '13px', textAlign: 'center' }}>
+                    💬 Messaging becomes available once a provider is assigned to your request.
+                  </div>
+                ) : request.messages?.length === 0 ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#8a9bb0', fontSize: '13px' }}>
+                    No messages yet — start the conversation!
+                  </div>
+                ) : (
+                  request.messages.map((msg, i) => {
+                    const isMine = msg.sender?._id === user?._id || msg.sender === user?._id;
+                    return (
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: isMine ? 'flex-end' : 'flex-start' }}>
+                        <div style={{ maxWidth: '75%', padding: '10px 14px', borderRadius: isMine ? '14px 14px 2px 14px' : '14px 14px 14px 2px', background: isMine ? '#1a3c5e' : '#fff', color: isMine ? '#fff' : '#1a2e44', fontSize: '13px', lineHeight: 1.5, border: isMine ? 'none' : '1px solid #e8ecf0' }}>
+                          {msg.content}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#8a9bb0', marginTop: '3px' }}>
+                          {msg.sender?.firstName || (isMine ? user?.firstName : 'Provider')} · {formatTime(msg.createdAt)}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Message input */}
+              {canChat && request.status !== 'completed' && request.status !== 'cancelled' && (
+                <div style={{ padding: '12px 16px', borderTop: '1px solid #f0f4f8', display: 'flex', gap: '8px' }}>
+                  <input
+                    value={message}
+                    onChange={e => setMessage(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                    placeholder="Type a message… (Enter to send)"
+                    style={{ flex: 1, padding: '10px 14px', border: '1.5px solid #dde3eb', borderRadius: '8px', fontSize: '13px', fontFamily: "'Outfit', sans-serif", outline: 'none' }}
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    disabled={sending || !message.trim()}
+                    style={{ padding: '10px 16px', background: sending || !message.trim() ? '#e8ecf0' : '#1a3c5e', border: 'none', borderRadius: '8px', color: sending || !message.trim() ? '#8a9bb0' : '#fff', fontSize: '13px', fontWeight: '700', cursor: sending || !message.trim() ? 'not-allowed' : 'pointer', fontFamily: "'Outfit', sans-serif" }}
+                  >
+                    Send
+                  </button>
+                </div>
+              )}
+            </Card>
+
+            {/* Review form */}
+            {canReview && (
+              <Card>
+                <SectionTitle>⭐ Leave a Review</SectionTitle>
+                {!showReview ? (
+                  <button
+                    onClick={() => setShowReview(true)}
+                    style={{ padding: '11px 24px', background: '#C17B2A', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: "'Outfit', sans-serif" }}
+                  >
+                    Rate this Service
+                  </button>
+                ) : (
+                  <div>
+                    <p style={{ fontSize: '14px', color: '#4a5568', marginBottom: '14px' }}>How was your experience with {request.provider?.firstName}?</p>
+
+                    {/* Star picker */}
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
+                      {[1, 2, 3, 4, 5].map(s => (
+                        <button
+                          key={s}
+                          onClick={() => setRating(s)}
+                          style={{ fontSize: '28px', background: 'none', border: 'none', cursor: 'pointer', color: s <= rating ? '#f39c12' : '#dde3eb', transition: 'color 0.2s, transform 0.1s', transform: s <= rating ? 'scale(1.1)' : 'scale(1)' }}
+                        >
+                          ★
+                        </button>
+                      ))}
+                      {rating > 0 && (
+                        <span style={{ fontSize: '13px', color: '#f39c12', fontWeight: '700', alignSelf: 'center', marginLeft: '6px' }}>
+                          {['', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'][rating]}
+                        </span>
+                      )}
+                    </div>
+
+                    <textarea
+                      value={comment}
+                      onChange={e => setComment(e.target.value)}
+                      placeholder="Share your experience (optional)…"
+                      rows={3}
+                      maxLength={1000}
+                      style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #dde3eb', borderRadius: '8px', fontSize: '13px', fontFamily: "'Outfit', sans-serif", resize: 'vertical', marginBottom: '12px', boxSizing: 'border-box', outline: 'none' }}
+                    />
+
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button
+                        onClick={handleSubmitReview}
+                        disabled={!rating || reviewLoading}
+                        style={{ padding: '10px 20px', background: !rating || reviewLoading ? '#8a9bb0' : '#C17B2A', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: !rating || reviewLoading ? 'not-allowed' : 'pointer', fontFamily: "'Outfit', sans-serif" }}
+                      >
+                        {reviewLoading ? 'Submitting…' : 'Submit Review'}
+                      </button>
+                      <button
+                        onClick={() => setShowReview(false)}
+                        style={{ padding: '10px 16px', background: '#fff', border: '1.5px solid #dde3eb', borderRadius: '8px', color: '#4a5568', fontSize: '14px', fontWeight: '600', cursor: 'pointer', fontFamily: "'Outfit', sans-serif" }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            )}
+
+            {/* Existing review */}
+            {request.customerReview && (
+              <Card>
+                <SectionTitle>Your Review</SectionTitle>
+                <StarRating rating={request.customerReview.rating} size={20} />
+                {request.customerReview.comment && (
+                  <p style={{ fontSize: '14px', color: '#4a5568', lineHeight: 1.6, margin: '10px 0 0', fontStyle: 'italic' }}>
+                    "{request.customerReview.comment}"
+                  </p>
+                )}
+              </Card>
+            )}
+          </div>
+
+          {/* ── RIGHT COLUMN ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+            {/* Provider card */}
+            <Card>
+              <SectionTitle>Assigned Provider</SectionTitle>
+              {request.provider ? (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                    <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#1a3c5e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: '700', color: '#fff', flexShrink: 0 }}>
+                      {request.provider.firstName?.charAt(0)}{request.provider.lastName?.charAt(0)}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '15px', fontWeight: '700', color: '#1a2e44' }}>
+                        {request.provider.firstName} {request.provider.lastName}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#8a9bb0' }}>{request.provider.email}</div>
+                    </div>
+                  </div>
+                  {request.provider.providerProfile && (
+                    <div style={{ fontSize: '13px', color: '#6b7c93', lineHeight: 1.5 }}>
+                      ⭐ {request.provider.providerProfile.averageRating?.toFixed(1) || '0.0'} rating
+                      · {request.provider.providerProfile.totalReviews || 0} reviews
+                      {request.provider.providerProfile.bio && (
+                        <p style={{ margin: '8px 0 0', fontStyle: 'italic', fontSize: '12px' }}>
+                          "{request.provider.providerProfile.bio}"
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '12px 0', color: '#8a9bb0', fontSize: '13px' }}>
+                  {request.status === 'scheduled'
+                    ? `📅 Scheduled for ${formatDateTime(request.scheduledDate)}`
+                    : '🔍 Searching for the best provider…'}
+                </div>
+              )}
+            </Card>
+
+            {/* Status history */}
+            <Card>
+              <SectionTitle>Status History</SectionTitle>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {[...(request.statusHistory || [])].reverse().map((h, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: i === 0 ? '#C17B2A' : '#dde3eb', marginTop: '4px', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#1a2e44', textTransform: 'capitalize' }}>
+                        {h.status?.replace(/_/g, ' ')}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#8a9bb0' }}>
+                        {formatDateTime(h.changedAt)}
+                      </div>
+                      {h.note && (
+                        <div style={{ fontSize: '11px', color: '#6b7c93', marginTop: '2px', fontStyle: 'italic' }}>
+                          {h.note}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            {/* Customer info (visible to provider) */}
+            {isProvider && request.customer && (
+              <Card>
+                <SectionTitle>Customer</SectionTitle>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#C17B2A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: '700', color: '#fff' }}>
+                    {request.customer.firstName?.charAt(0)}{request.customer.lastName?.charAt(0)}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#1a2e44' }}>
+                      {request.customer.firstName} {request.customer.lastName}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#8a9bb0' }}>{request.customer.email}</div>
+                    {request.customer.phone && (
+                      <div style={{ fontSize: '12px', color: '#8a9bb0' }}>📞 {request.customer.phone}</div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default RequestDetailPage;

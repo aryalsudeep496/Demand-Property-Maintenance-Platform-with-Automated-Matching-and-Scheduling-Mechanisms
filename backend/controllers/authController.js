@@ -113,10 +113,12 @@ const login = async (req, res) => {
 
     const user = await User.findOne({ email }).select('+password +loginAttempts +lockUntil');
 
-    const invalidMsg = 'Invalid email or password.';
-
     if (!user) {
-      return res.status(401).json({ success: false, message: invalidMsg });
+      return res.status(401).json({
+        success: false,
+        message: 'No account found with this email address.',
+        code: 'EMAIL_NOT_FOUND',
+      });
     }
 
     // Check if account is locked
@@ -136,8 +138,9 @@ const login = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: attemptsLeft > 0
-          ? `${invalidMsg} ${attemptsLeft} attempt(s) remaining before lockout.`
-          : invalidMsg,
+          ? `Wrong password. ${attemptsLeft} attempt(s) remaining before your account is locked.`
+          : 'Wrong password. Your account has been locked — please reset your password.',
+        code: 'WRONG_PASSWORD',
       });
     }
 

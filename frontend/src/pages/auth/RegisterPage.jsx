@@ -9,6 +9,84 @@ import AuthLayout from '../../components/auth/AuthLayout';
 import FormInput from '../../components/common/FormInput';
 import PasswordStrengthMeter from '../../components/common/PasswordStrengthMeter';
 
+// ─── Role options ──────────────────────────────────────────────────────────────
+const ROLE_OPTIONS = [
+  {
+    value:    'customer',
+    emoji:    '🔍',
+    label:    'I need services',
+    sub:      'Find & book verified pros',
+    accent:   '#1a3c5e',
+    accentBg: '#e8f0f8',
+  },
+  {
+    value:    'provider',
+    emoji:    '🔧',
+    label:    'I offer services',
+    sub:      'Receive & manage bookings',
+    accent:   '#C17B2A',
+    accentBg: '#fdf3e3',
+  },
+];
+
+// ─── Success screen ────────────────────────────────────────────────────────────
+const SuccessScreen = ({ userEmail, onResend }) => (
+  <AuthLayout>
+    <div style={{ textAlign: 'center' }}>
+
+      <div style={{ width: '76px', height: '76px', borderRadius: '50%', background: 'linear-gradient(135deg, #d4edda, #a8d5ba)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '34px', margin: '0 auto 18px' }}>
+        🎉
+      </div>
+
+      <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#0d2137', margin: '0 0 8px', letterSpacing: '-0.3px', fontFamily: "'Outfit', sans-serif" }}>
+        Account Created!
+      </h2>
+      <p style={{ fontSize: '14px', color: '#6b7c93', margin: '0 0 24px', lineHeight: 1.6 }}>
+        Your PropMaintain account is ready. One more step!
+      </p>
+
+      {/* Email instruction box */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', background: '#f0f6ff', border: '1px solid #bee3f8', borderRadius: '12px', padding: '18px', marginBottom: '22px', textAlign: 'left' }}>
+        <div style={{ fontSize: '26px', flexShrink: 0 }}>📧</div>
+        <div>
+          <p style={{ fontSize: '14px', fontWeight: '700', color: '#1a3c5e', margin: '0 0 5px', fontFamily: "'Outfit', sans-serif" }}>
+            Verify your email to continue
+          </p>
+          <p style={{ fontSize: '13px', color: '#4a5568', lineHeight: 1.6, margin: 0, fontFamily: "'Outfit', sans-serif" }}>
+            A link was sent to <strong>{userEmail}</strong>. Click it to activate your account. Check your spam folder if needed.
+          </p>
+        </div>
+      </div>
+
+      {/* Steps */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '20px' }}>
+        {[
+          { num: '1', text: 'Check inbox' },
+          { num: '2', text: 'Click the link' },
+          { num: '3', text: 'Sign in' },
+        ].map(({ num, text }) => (
+          <div key={num} style={{ padding: '12px 6px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e8ecf0', textAlign: 'center' }}>
+            <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#1a3c5e', color: '#fff', fontSize: '11px', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 6px', fontFamily: "'Outfit', sans-serif" }}>{num}</div>
+            <p style={{ fontSize: '11px', color: '#4a5568', margin: 0, fontWeight: '600', fontFamily: "'Outfit', sans-serif" }}>{text}</p>
+          </div>
+        ))}
+      </div>
+
+      <p style={{ fontSize: '13px', color: '#6b7c93', marginBottom: '18px', fontFamily: "'Outfit', sans-serif" }}>
+        Didn't get the email?{' '}
+        <button type="button" onClick={onResend} style={{ background: 'none', border: 'none', color: '#C17B2A', fontWeight: '700', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline', fontFamily: "'Outfit', sans-serif", padding: 0 }}>
+          Resend it
+        </button>
+      </p>
+
+      <Link to="/auth/login" className="auth-submit-btn" style={{ display: 'block', textDecoration: 'none', textAlign: 'center' }}>
+        Go to Sign In →
+      </Link>
+    </div>
+  </AuthLayout>
+);
+
+// ─── Register page ─────────────────────────────────────────────────────────────
 const RegisterPage = () => {
   const navigate                   = useNavigate();
   const { register: registerUser } = useAuth();
@@ -55,9 +133,7 @@ const RegisterPage = () => {
       setUserEmail(data.email);
       setSuccessMsg(result.message || 'Account created successfully.');
     } else {
-      // Show general error banner at top
       setServerError(result.message || 'Registration failed.');
-      // Show field-level errors inline under each field
       if (result.errors && Object.keys(result.errors).length > 0) {
         Object.entries(result.errors).forEach(([field, msg]) => {
           setError(field, { type: 'server', message: msg });
@@ -66,109 +142,58 @@ const RegisterPage = () => {
     }
   };
 
-  // ── Success screen ─────────────────────────────────────────────────────────
   if (successMsg) {
     return (
-      <AuthLayout>
-        <div style={styles.successCard}>
-
-          {/* Big success icon */}
-          <div style={styles.successIconBig}>🎉</div>
-
-          {/* Main heading */}
-          <h2 style={styles.successTitle}>Signup Successful!</h2>
-
-          {/* Green success banner */}
-          <div style={styles.successBanner}>
-            <span style={styles.successBannerIcon}>✅</span>
-            <span style={styles.successBannerText}>
-              Your account has been created successfully
-            </span>
-          </div>
-
-          {/* Email instruction box */}
-          <div style={styles.emailBox}>
-            <div style={styles.emailIcon}>📧</div>
-            <div>
-              <p style={styles.emailTitle}>
-                Email Verification Link Sent to Your Mail
-              </p>
-              <p style={styles.emailBody}>
-                A verification link has been sent to{' '}
-                <strong>{userEmail}</strong>.
-                Please verify your email and then proceed to login.
-                Check your spam folder if you don't see it.
-              </p>
-            </div>
-          </div>
-
-          {/* 3 steps */}
-          <div style={styles.stepsRow}>
-            {[
-              { num: '1', text: 'Check your email inbox' },
-              { num: '2', text: 'Click the verification link' },
-              { num: '3', text: 'Come back and sign in' },
-            ].map(({ num, text }) => (
-              <div key={num} style={styles.step}>
-                <div style={styles.stepNum}>{num}</div>
-                <div style={styles.stepText}>{text}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Resend link */}
-          <p style={styles.resendRow}>
-            Didn't receive the email?{' '}
-            <button
-              type="button"
-              onClick={() => navigate('/auth/resend-verification', { state: { email: userEmail } })}
-              style={styles.inlineLink}
-            >
-              Resend verification email
-            </button>
-          </p>
-
-          {/* Go to login button */}
-          <Link to="/auth/login" style={styles.loginBtn}>
-            Go to Login Page →
-          </Link>
-
-        </div>
-      </AuthLayout>
+      <SuccessScreen
+        userEmail={userEmail}
+        onResend={() => navigate('/auth/resend-verification', { state: { email: userEmail } })}
+      />
     );
   }
 
-  // ── Registration form ──────────────────────────────────────────────────────
   return (
     <AuthLayout
       title="Create your account"
-      subtitle="Join PropMaintain to book or offer property services."
+      subtitle="Join PropMaintain — book or offer property services."
     >
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
 
         {/* ── Role selector ── */}
-        <div style={styles.roleRow}>
-          {[
-            { value: 'customer', label: '🔍 I need services',  sub: 'Find & book professionals' },
-            { value: 'provider', label: '🔧 I offer services', sub: 'List & receive bookings'    },
-          ].map(({ value, label, sub }) => (
-            <label
-              key={value}
-              style={{
-                ...styles.roleCard,
-                ...(selectedRole === value ? styles.roleCardActive : {}),
-              }}
-            >
-              <input type="radio" value={value} style={{ display: 'none' }} {...register('role')} />
-              <span style={styles.roleLabel}>{label}</span>
-              <span style={styles.roleSub}>{sub}</span>
-            </label>
-          ))}
+        <div style={{ marginBottom: '22px' }}>
+          <p style={sectionLabelStyle}>I want to…</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {ROLE_OPTIONS.map(({ value, emoji, label, sub, accent, accentBg }) => {
+              const active = selectedRole === value;
+              return (
+                <label
+                  key={value}
+                  className={`role-card${active ? ' role-card-active' : ''}`}
+                  style={{ position: 'relative', ...(active ? { borderColor: accent, background: accentBg } : {}) }}
+                >
+                  <input type="radio" value={value} style={{ display: 'none' }} {...register('role')} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
+                    <span style={{ fontSize: '18px' }}>{emoji}</span>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: active ? accent : '#1a2e44', fontFamily: "'Outfit', sans-serif" }}>
+                      {label}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#8a9bb0', fontFamily: "'Outfit', sans-serif", paddingLeft: '26px' }}>
+                    {sub}
+                  </span>
+                  {active && (
+                    <div style={{ position: 'absolute', top: '8px', right: '10px', width: '18px', height: '18px', borderRadius: '50%', background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ color: '#fff', fontSize: '10px', fontWeight: '800' }}>✓</span>
+                    </div>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+          {errors.role && <p className="auth-form-error">⚠ {errors.role.message}</p>}
         </div>
-        {errors.role && <p style={styles.fieldError}>⚠ {errors.role.message}</p>}
 
         {/* ── Name row ── */}
-        <div style={styles.nameRow}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '4px' }}>
           <FormInput
             label="First Name"
             name="firstName"
@@ -210,11 +235,11 @@ const RegisterPage = () => {
           error={errors.phone?.message}
           placeholder="+44 7700 900000"
           autoComplete="tel"
-          hint="Optional – used for service notifications"
+          hint="Optional — used for job notifications"
         />
 
-        {/* ── Password ── */}
-        <div style={styles.passwordSection}>
+        {/* ── Password + strength meter ── */}
+        <div style={{ marginBottom: '4px' }}>
           <FormInput
             label="Password"
             name="password"
@@ -225,10 +250,12 @@ const RegisterPage = () => {
             required
             autoComplete="new-password"
           />
-          <PasswordStrengthMeter password={passwordValue} />
+          <div style={{ marginTop: '-2px', marginBottom: '10px' }}>
+            <PasswordStrengthMeter password={passwordValue} />
+          </div>
         </div>
 
-        {/* ── Confirm Password ── */}
+        {/* ── Confirm password ── */}
         <FormInput
           label="Confirm Password"
           name="confirmPassword"
@@ -240,166 +267,57 @@ const RegisterPage = () => {
           autoComplete="new-password"
         />
 
-        {/* ── Terms checkbox ── */}
-        <div style={styles.termsRow}>
-          <label style={styles.checkboxLabel}>
-            <input type="checkbox" style={styles.checkbox} {...register('agreeToTerms')} />
-            <span style={styles.checkboxText}>
+        {/* ── Terms ── */}
+        <div style={{ margin: '8px 0 18px' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              className="auth-checkbox"
+              style={{ marginTop: '2px', flexShrink: 0 }}
+              {...register('agreeToTerms')}
+            />
+            <span style={{ fontSize: '13px', color: '#4a5568', lineHeight: 1.55, fontFamily: "'Outfit', sans-serif" }}>
               I agree to the{' '}
-              <Link to="/terms" style={styles.link}>Terms of Service</Link>
+              <Link to="/terms" className="auth-link">Terms of Service</Link>
               {' '}and{' '}
-              <Link to="/privacy" style={styles.link}>Privacy Policy</Link>
+              <Link to="/privacy" className="auth-link">Privacy Policy</Link>
             </span>
           </label>
           {errors.agreeToTerms && (
-            <p style={styles.fieldError}>⚠ {errors.agreeToTerms.message}</p>
+            <p className="auth-form-error" style={{ marginTop: '5px' }}>⚠ {errors.agreeToTerms.message}</p>
           )}
         </div>
 
-        {/* ── Server error banner ── */}
+        {/* ── Server error ── */}
         {serverError && (
-          <div role="alert" style={styles.serverError}>
-            ⚠ {serverError}
-          </div>
+          <div role="alert" className="auth-error-box">⚠ {serverError}</div>
         )}
 
         {/* ── Submit ── */}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          style={{ ...styles.submitBtn, ...(isSubmitting ? styles.submitBtnDisabled : {}) }}
-        >
-          {isSubmitting ? 'Creating account…' : 'Create Account'}
+        <button type="submit" disabled={isSubmitting} className="auth-submit-btn">
+          {isSubmitting
+            ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <span style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                Creating account…
+              </span>
+            : 'Create Account →'
+          }
         </button>
 
-        <p style={styles.loginPrompt}>
+        <p style={{ textAlign: 'center', fontSize: '13px', color: '#6b7c93', margin: 0, fontFamily: "'Outfit', sans-serif" }}>
           Already have an account?{' '}
-          <Link to="/auth/login" style={styles.link}>Sign in</Link>
+          <Link to="/auth/login" className="auth-link">Sign in</Link>
         </p>
+
       </form>
     </AuthLayout>
   );
 };
 
-// ─── Styles ────────────────────────────────────────────────────────────────────
-const styles = {
-  // ── Form styles ─────────────────────────────────────────────────────────────
-  nameRow: {
-    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px',
-  },
-  roleRow: {
-    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px',
-  },
-  roleCard: {
-    display: 'flex', flexDirection: 'column', gap: '4px', padding: '14px',
-    border: '2px solid #dde3eb', borderRadius: '10px', cursor: 'pointer',
-    transition: 'all 0.2s', background: '#fff',
-  },
-  roleCardActive: { borderColor: '#1a3c5e', background: '#f0f6ff' },
-  roleLabel: {
-    fontSize: '13px', fontWeight: '600', color: '#1a2e44',
-    fontFamily: "'DM Sans', sans-serif",
-  },
-  roleSub: { fontSize: '11px', color: '#8a9bb0', fontFamily: "'DM Sans', sans-serif" },
-  passwordSection: { marginBottom: '16px' },
-  termsRow: { marginBottom: '16px', marginTop: '4px' },
-  checkboxLabel: { display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' },
-  checkbox: { marginTop: '2px', accentColor: '#1a3c5e', cursor: 'pointer', flexShrink: 0 },
-  checkboxText: {
-    fontSize: '13px', color: '#4a5568', fontFamily: "'DM Sans', sans-serif", lineHeight: 1.5,
-  },
-  link: { color: '#1a3c5e', fontWeight: '600', textDecoration: 'none' },
-  serverError: {
-    background: '#fff0f0', border: '1px solid #fcd0d0', borderRadius: '8px',
-    padding: '12px 14px', fontSize: '13px', color: '#c0392b',
-    marginBottom: '16px', fontFamily: "'DM Sans', sans-serif",
-  },
-  fieldError: {
-    margin: '4px 0 0', fontSize: '12px', color: '#e74c3c',
-    fontFamily: "'DM Sans', sans-serif",
-  },
-  submitBtn: {
-    width: '100%', padding: '13px', background: '#1a3c5e', color: '#ffffff',
-    border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: '600',
-    fontFamily: "'DM Sans', sans-serif", cursor: 'pointer',
-    transition: 'background 0.2s', marginBottom: '16px',
-  },
-  submitBtnDisabled: { background: '#8a9bb0', cursor: 'not-allowed' },
-  loginPrompt: {
-    textAlign: 'center', fontSize: '13px', color: '#6b7c93',
-    fontFamily: "'DM Sans', sans-serif", margin: 0,
-  },
-
-  // ── Success screen styles ────────────────────────────────────────────────────
-  successCard: {
-    textAlign: 'center', padding: '8px 0',
-  },
-  successIconBig: {
-    fontSize: '64px', marginBottom: '16px', lineHeight: 1,
-  },
-  successTitle: {
-    fontSize: '26px', fontWeight: '800', color: '#0d2137',
-    margin: '0 0 16px', fontFamily: "'DM Sans', sans-serif",
-    letterSpacing: '-0.3px',
-  },
-  successBanner: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    gap: '8px', background: '#d4edda', border: '1px solid #c3e6cb',
-    borderRadius: '8px', padding: '12px 16px', marginBottom: '20px',
-  },
-  successBannerIcon: { fontSize: '18px' },
-  successBannerText: {
-    fontSize: '14px', fontWeight: '700', color: '#155724',
-    fontFamily: "'DM Sans', sans-serif",
-  },
-  emailBox: {
-    display: 'flex', alignItems: 'flex-start', gap: '14px',
-    background: '#f0f6ff', border: '1px solid #bee3f8',
-    borderRadius: '10px', padding: '16px', marginBottom: '20px',
-    textAlign: 'left',
-  },
-  emailIcon: { fontSize: '28px', flexShrink: 0 },
-  emailTitle: {
-    fontSize: '14px', fontWeight: '700', color: '#1a3c5e',
-    margin: '0 0 6px', fontFamily: "'DM Sans', sans-serif",
-  },
-  emailBody: {
-    fontSize: '13px', color: '#4a5568', lineHeight: 1.6,
-    margin: 0, fontFamily: "'DM Sans', sans-serif",
-  },
-  stepsRow: {
-    display: 'flex', gap: '10px', marginBottom: '20px',
-  },
-  step: {
-    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
-    gap: '6px', padding: '12px 8px', background: '#f8fafc',
-    borderRadius: '8px', border: '1px solid #e8ecf0',
-  },
-  stepNum: {
-    width: '28px', height: '28px', borderRadius: '50%',
-    background: '#1a3c5e', color: '#fff', fontSize: '13px', fontWeight: '700',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontFamily: "'DM Sans', sans-serif",
-  },
-  stepText: {
-    fontSize: '11px', color: '#4a5568', textAlign: 'center',
-    fontFamily: "'DM Sans', sans-serif", lineHeight: 1.4,
-  },
-  resendRow: {
-    fontSize: '13px', color: '#6b7c93', marginBottom: '16px',
-    fontFamily: "'DM Sans', sans-serif",
-  },
-  inlineLink: {
-    background: 'none', border: 'none', color: '#1a3c5e', fontWeight: '600',
-    cursor: 'pointer', fontSize: '13px', fontFamily: "'DM Sans', sans-serif",
-    textDecoration: 'underline', padding: 0,
-  },
-  loginBtn: {
-    display: 'block', padding: '13px', background: '#1a3c5e',
-    color: '#fff', borderRadius: '8px', textDecoration: 'none',
-    fontSize: '15px', fontWeight: '700', fontFamily: "'DM Sans', sans-serif",
-    textAlign: 'center',
-  },
+const sectionLabelStyle = {
+  fontSize: '12px', fontWeight: '700', color: '#4a5568',
+  textTransform: 'uppercase', letterSpacing: '0.5px',
+  margin: '0 0 8px', fontFamily: "'Outfit', sans-serif",
 };
 
 export default RegisterPage;

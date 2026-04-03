@@ -1,374 +1,280 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { requestsAPI, usersAPI, STATUS_CONFIG } from '../../utils/requestsAPI';
+
+const NAV_LINKS = [
+  { to: '/provider/dashboard',     label: 'Home',          icon: '🏠' },
+  { to: '/provider/requests',      label: 'My Jobs',       icon: '📋' },
+  { to: '/provider/available',     label: 'Available',      icon: '🔍' },
+  { to: '/provider/profile',       label: 'Profile',       icon: '👤' },
+  { to: '/provider/notifications', label: 'Notifications', icon: '🔔', notif: true },
+];
 
 const ProviderDashboard = () => {
   const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const navigate         = useNavigate();
+  const location         = useLocation();
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/auth/login');
+  const [stats,       setStats]       = useState(null);
+  const [recentJobs,  setRecentJobs]  = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [toggling,    setToggling]    = useState(false);
+  const [isAvailable, setIsAvailable] = useState(user?.providerProfile?.isAvailable ?? true);
+
+  const handleLogout = async () => { await logout(); navigate('/auth/login'); };
+
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [jobRes, notifRes] = await Promise.all([
+        requestsAPI.getMy({ limit: 5 }),
+        usersAPI.getNotifications({ unreadOnly: 'true', limit: 1 }),
+      ]);
+
+      const jobs  = jobRes.data.data || [];
+      const total = jobRes.data.pagination?.total || 0;
+      setRecentJobs(jobs);
+      setUnreadCount(notifRes.data.unreadCount || 0);
+
+      const completed  = jobs.filter(j => j.status === 'completed').length;
+      const inProgress = jobs.filter(j => j.status === 'in_progress').length;
+      setStats({ total, completed, inProgress });
+
+    } catch (err) {
+      console.error('ProviderDashboard load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadDashboard(); }, [loadDashboard]);
+
+  useEffect(() => {
+    if (user?.providerProfile) {
+      setIsAvailable(user.providerProfile.isAvailable ?? true);
+    }
+  }, [user]);
+
+  const handleToggleAvailability = async () => {
+    setToggling(true);
+    try {
+      const res = await usersAPI.toggleAvailability();
+      setIsAvailable(res.data.isAvailable);
+    } catch (err) {
+      console.error('toggleAvailability error:', err);
+    } finally {
+      setToggling(false);
+    }
   };
 
+  const formatDate = (d) =>
+    new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const catIcon = (c) => ({ home_repair: '🔧', home_upgrade: '🏡', tech_digital: '💻' })[c] || '🛠️';
+
+  const isVerified = user?.providerProfile?.isVerified;
+
   return (
-    <div style={styles.page}>
+    <div style={{ minHeight: '100vh', background: '#f0f4f8', fontFamily: "'Outfit', sans-serif" }}>
+
       {/* ── Navbar ── */}
-      <nav style={styles.navbar}>
-        <div style={styles.navLeft}>
-          <span style={styles.logo}>🏠 PropMaintain</span>
+      <nav style={navStyle}>
+        <Link to="/home" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
+          <span style={{ fontSize: '20px' }}>🏠</span>
+          <span style={{ fontSize: '16px', fontWeight: '800', color: '#fff' }}>PropMaintain</span>
+        </Link>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          {NAV_LINKS.map(({ to, label, icon, notif }) => (
+            <Link key={to} to={to} style={{
+              display: 'flex', alignItems: 'center', gap: '5px', position: 'relative',
+              padding: '6px 12px', borderRadius: '6px', textDecoration: 'none',
+              fontSize: '13px', fontWeight: '500',
+              color: location.pathname === to ? '#fff' : 'rgba(255,255,255,0.7)',
+              background: location.pathname === to ? 'rgba(255,255,255,0.15)' : 'transparent',
+            }}>
+              {icon} {label}
+              {notif && unreadCount > 0 && (
+                <span style={{ position: 'absolute', top: '2px', right: '4px', width: '16px', height: '16px', borderRadius: '50%', background: '#C17B2A', color: '#fff', fontSize: '9px', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Link>
+          ))}
         </div>
-        <div style={styles.navRight}>
-          <span style={styles.welcomeText}>
-            👋 Welcome, {user?.firstName} {user?.lastName}
-          </span>
-          <button onClick={handleLogout} style={styles.logoutBtn}>
-            🚪 Logout
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>👋 {user?.firstName}</span>
+          <button onClick={handleLogout} style={navBtnStyle}>🚪 Logout</button>
         </div>
       </nav>
 
-      {/* ── Main Content ── */}
-      <div style={styles.content}>
+      <div style={{ maxWidth: '960px', margin: '32px auto', padding: '0 20px' }}>
 
-        {/* ── Profile Card ── */}
-        <div style={styles.card}>
-          <div style={styles.profileHeader}>
-            <div style={styles.avatar}>
-              {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
-            </div>
-            <div style={styles.profileInfo}>
-              <h1 style={styles.heading}>{user?.firstName} {user?.lastName}</h1>
-              <p style={styles.subheading}>{user?.email}</p>
-              <span style={styles.roleBadge}>🔧 Service Provider</span>
-            </div>
+        {/* ── Welcome row ── */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px', flexWrap: 'wrap', gap: '14px' }}>
+          <div>
+            <h1 style={{ fontSize: '26px', fontWeight: '800', color: '#0d2137', margin: '0 0 4px' }}>
+              Welcome back, {user?.firstName}! 👋
+            </h1>
+            <p style={{ fontSize: '14px', color: '#6b7c93', margin: 0 }}>
+              {isVerified
+                ? '✅ Verified Provider'
+                : '⏳ Verification pending — complete your profile to get started.'}
+            </p>
           </div>
 
-          {/* ── Info Grid ── */}
-          <div style={styles.infoGrid}>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Full Name</span>
-              <span style={styles.infoValue}>{user?.firstName} {user?.lastName}</span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Email</span>
-              <span style={styles.infoValue}>{user?.email}</span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Role</span>
-              <span style={styles.infoValue}>Service Provider</span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Account Status</span>
-              <span style={{ ...styles.infoValue, color: '#27ae60', fontWeight: '700' }}>
-                ✅ Active
-              </span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Verification Status</span>
-              <span style={{ ...styles.infoValue, color: '#f39c12', fontWeight: '700' }}>
-                ⏳ Pending Verification
-              </span>
-            </div>
-            <div style={styles.infoItem}>
-              <span style={styles.infoLabel}>Availability</span>
-              <span style={{ ...styles.infoValue, color: '#27ae60', fontWeight: '700' }}>
-                🟢 Available
-              </span>
-            </div>
-          </div>
+          {/* Availability toggle */}
+          <button
+            onClick={handleToggleAvailability}
+            disabled={toggling}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              padding: '10px 22px', borderRadius: '30px', border: 'none',
+              cursor: toggling ? 'not-allowed' : 'pointer',
+              fontFamily: "'Outfit', sans-serif", fontSize: '14px', fontWeight: '700',
+              background: isAvailable ? '#27ae60' : '#e74c3c',
+              color: '#fff', boxShadow: `0 4px 12px ${isAvailable ? '#27ae6044' : '#e74c3c44'}`,
+              opacity: toggling ? 0.7 : 1, transition: 'background 0.25s',
+            }}
+          >
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'rgba(255,255,255,0.8)', display: 'inline-block' }} />
+            {toggling ? 'Updating…' : isAvailable ? 'Available for Jobs' : 'Unavailable'}
+          </button>
         </div>
 
-        {/* ── Stats Row ── */}
-        <div style={styles.statsRow}>
-          {[
-            { icon: '📋', label: 'Total Jobs',      value: '0', color: '#1a3c5e' },
-            { icon: '⏳', label: 'Pending',          value: '0', color: '#f39c12' },
-            { icon: '✅', label: 'Completed',        value: '0', color: '#27ae60' },
-            { icon: '⭐', label: 'Average Rating',   value: 'N/A', color: '#e67e22' },
+        {/* ── Stats row ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
+          {loading ? (
+            [1,2,3,4].map(i => <div key={i} style={{ height: '90px', background: '#fff', borderRadius: '12px', border: '1px solid #e8ecf0', animation: 'pulse 1.5s ease-in-out infinite' }} />)
+          ) : [
+            { icon: '📋', label: 'Total Jobs',    value: stats?.total      ?? 0, color: '#1a3c5e' },
+            { icon: '🔧', label: 'In Progress',   value: stats?.inProgress ?? 0, color: '#e67e22' },
+            { icon: '✅', label: 'Completed',      value: stats?.completed  ?? 0, color: '#27ae60' },
+            { icon: '⭐', label: 'Rating',         value: user?.providerProfile?.averageRating ? user.providerProfile.averageRating.toFixed(1) : 'N/A', color: '#C17B2A' },
           ].map(({ icon, label, value, color }) => (
-            <div key={label} style={styles.statCard}>
-              <span style={styles.statIcon}>{icon}</span>
-              <span style={{ ...styles.statValue, color }}>{value}</span>
-              <span style={styles.statLabel}>{label}</span>
+            <div key={label} style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e8ecf0', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', textAlign: 'center' }}>
+              <span style={{ fontSize: '26px' }}>{icon}</span>
+              <span style={{ fontSize: '26px', fontWeight: '800', color }}>{value}</span>
+              <span style={{ fontSize: '12px', color: '#8a9bb0', fontWeight: '600' }}>{label}</span>
             </div>
           ))}
         </div>
 
-        {/* ── Service Categories ── */}
-        <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>🛠️ Service Categories</h2>
-          <p style={styles.sectionSubtitle}>
-            Complete your profile to start receiving service requests.
-          </p>
-          <div style={styles.categoryGrid}>
+        {/* ── Quick links ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '28px' }}>
+          {[
+            { to: '/provider/requests',      icon: '📋', label: 'My Jobs',        desc: 'View assigned jobs',         bg: '#1a3c5e' },
+            { to: '/provider/available',     icon: '🔍', label: 'Browse Jobs',    desc: 'Find open requests',         bg: '#C17B2A' },
+            { to: '/provider/profile',       icon: '👤', label: 'My Profile',     desc: 'Update your details',        bg: '#2a7a4a' },
+            { to: '/provider/notifications', icon: '🔔', label: 'Notifications',  desc: 'Stay up to date',            bg: '#6c3483' },
+          ].map(({ to, icon, label, desc, bg }) => (
+            <Link key={to} to={to} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '18px', background: bg, borderRadius: '12px', textDecoration: 'none', boxShadow: `0 4px 14px ${bg}44`, transition: 'transform 0.2s' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}
+            >
+              <span style={{ fontSize: '24px' }}>{icon}</span>
+              <span style={{ fontSize: '14px', fontWeight: '800', color: '#fff' }}>{label}</span>
+              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.75)' }}>{desc}</span>
+            </Link>
+          ))}
+        </div>
+
+        {/* ── Recent jobs ── */}
+        <div style={cardStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0d2137', margin: 0 }}>Recent Jobs</h2>
+            <Link to="/provider/requests" style={{ fontSize: '13px', color: '#C17B2A', fontWeight: '700', textDecoration: 'none' }}>View all →</Link>
+          </div>
+
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[1,2,3].map(i => <div key={i} style={{ height: '72px', background: '#f8fafc', borderRadius: '10px', animation: 'pulse 1.5s ease-in-out infinite' }} />)}
+            </div>
+          ) : recentJobs.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 24px' }}>
+              <div style={{ fontSize: '44px', marginBottom: '12px' }}>🗂️</div>
+              <p style={{ fontSize: '14px', color: '#8a9bb0', margin: '0 0 16px' }}>No jobs assigned yet.</p>
+              <Link to="/provider/available" style={{ display: 'inline-block', padding: '10px 24px', background: '#C17B2A', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontSize: '14px', fontWeight: '700' }}>
+                Browse Available Jobs
+              </Link>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {recentJobs.map(job => {
+                const cfg = STATUS_CONFIG[job.status] || {};
+                return (
+                  <Link key={job._id} to={`/provider/requests/${job._id}`} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e8ecf0', textDecoration: 'none', transition: 'background 0.15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#eef3f9'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; }}
+                  >
+                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#fff', border: '1px solid #e8ecf0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                      {catIcon(job.category)}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: '14px', fontWeight: '700', color: '#1a2e44', margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{job.title}</p>
+                      <p style={{ fontSize: '12px', color: '#8a9bb0', margin: 0 }}>
+                        👤 {job.customer?.firstName} {job.customer?.lastName} · 📍 {job.location?.city} · 🗓 {formatDate(job.createdAt)}
+                      </p>
+                    </div>
+                    <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap' }}>
+                      {cfg.icon} {cfg.label}
+                    </span>
+                    <span style={{ fontSize: '16px', color: '#dde3eb' }}>›</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── Profile & services ── */}
+        <div style={{ ...cardStyle, marginTop: '20px' }}>
+          <h2 style={{ fontSize: '16px', fontWeight: '800', color: '#0d2137', margin: '0 0 14px' }}>My Profile</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
             {[
-              { icon: '🔨', title: 'Home Repair',    desc: 'Plumbing, electrical, carpentry' },
-              { icon: '🏡', title: 'Home Upgrade',   desc: 'Renovation, painting, flooring' },
-              { icon: '💻', title: 'Tech & Digital', desc: 'Device repair, network setup' },
-            ].map(({ icon, title, desc }) => (
-              <div key={title} style={styles.categoryCard}>
-                <span style={styles.categoryIcon}>{icon}</span>
-                <h3 style={styles.categoryTitle}>{title}</h3>
-                <p style={styles.categoryDesc}>{desc}</p>
-                <span style={styles.comingSoonTag}>Coming Soon</span>
+              { label: 'Name',         value: `${user?.firstName} ${user?.lastName}` },
+              { label: 'Email',        value: user?.email },
+              { label: 'Business',     value: user?.providerProfile?.businessName || 'Not set' },
+              { label: 'Verification', value: isVerified ? '✅ Verified' : '⏳ Pending', highlight: true, hColor: isVerified ? '#27ae60' : '#e67e22' },
+            ].map(({ label, value, highlight, hColor }) => (
+              <div key={label} style={{ padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e8ecf0' }}>
+                <p style={{ fontSize: '10px', fontWeight: '700', color: '#8a9bb0', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '0 0 3px' }}>{label}</p>
+                <p style={{ fontSize: '14px', fontWeight: '600', color: highlight ? hColor : '#1a2e44', margin: 0 }}>{value}</p>
               </div>
             ))}
           </div>
-        </div>
-
-        {/* ── Coming Soon ── */}
-        <div style={styles.card}>
-          <h2 style={styles.sectionTitle}>🚧 Coming Soon</h2>
-          <div style={styles.featureList}>
-            {[
-              { icon: '📍', text: 'Set your service area and availability radius' },
-              { icon: '📅', text: 'Manage your availability schedule' },
-              { icon: '📬', text: 'Receive and respond to service requests' },
-              { icon: '💬', text: 'Chat with customers in real-time' },
-              { icon: '⭐', text: 'View your ratings and reviews' },
-              { icon: '💰', text: 'Track your earnings and job history' },
-            ].map(({ icon, text }) => (
-              <div key={text} style={styles.featureItem}>
-                <span style={styles.featureIcon}>{icon}</span>
-                <span style={styles.featureText}>{text}</span>
-              </div>
-            ))}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <Link to="/provider/profile" style={{ padding: '9px 18px', background: '#C17B2A', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontSize: '13px', fontWeight: '700' }}>
+              ✏️ Edit Profile
+            </Link>
+            <Link to="/account/change-password" style={{ padding: '9px 18px', background: '#1a3c5e', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontSize: '13px', fontWeight: '700' }}>
+              🔐 Change Password
+            </Link>
           </div>
         </div>
-
-        {/* ── Logout Button ── */}
-        <button onClick={handleLogout} style={styles.logoutBtnLarge}>
-          🚪 Logout
-        </button>
-
       </div>
+
+      <style>{`
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+      `}</style>
     </div>
   );
 };
 
-const styles = {
-  page: {
-    minHeight:  '100vh',
-    background: '#f0f4f8',
-    fontFamily: "'DM Sans', sans-serif",
-  },
-
-  // ── Navbar ──
-  navbar: {
-    display:        'flex',
-    justifyContent: 'space-between',
-    alignItems:     'center',
-    padding:        '0 32px',
-    height:         '64px',
-    background:     '#1a3c5e',
-    boxShadow:      '0 2px 8px rgba(0,0,0,0.15)',
-  },
-  navLeft:  { display: 'flex', alignItems: 'center' },
-  navRight: { display: 'flex', alignItems: 'center', gap: '16px' },
-  logo: {
-    fontSize:   '20px',
-    fontWeight: '700',
-    color:      '#ffffff',
-  },
-  welcomeText: {
-    fontSize: '14px',
-    color:    'rgba(255,255,255,0.85)',
-  },
-  logoutBtn: {
-    padding:      '8px 16px',
-    background:   'rgba(255,255,255,0.15)',
-    border:       '1px solid rgba(255,255,255,0.3)',
-    borderRadius: '6px',
-    color:        '#ffffff',
-    fontSize:     '13px',
-    fontWeight:   '600',
-    cursor:       'pointer',
-  },
-
-  // ── Content ──
-  content: {
-    maxWidth: '900px',
-    margin:   '32px auto',
-    padding:  '0 24px',
-    display:  'flex',
-    flexDirection: 'column',
-    gap:      '24px',
-  },
-  card: {
-    background:   '#ffffff',
-    borderRadius: '12px',
-    padding:      '28px',
-    boxShadow:    '0 2px 12px rgba(0,0,0,0.08)',
-  },
-
-  // ── Profile ──
-  profileHeader: {
-    display:      'flex',
-    alignItems:   'center',
-    gap:          '20px',
-    marginBottom: '24px',
-  },
-  avatar: {
-    width:          '64px',
-    height:         '64px',
-    borderRadius:   '50%',
-    background:     '#1a3c5e',
-    color:          '#ffffff',
-    display:        'flex',
-    alignItems:     'center',
-    justifyContent: 'center',
-    fontSize:       '22px',
-    fontWeight:     '700',
-    flexShrink:     0,
-  },
-  profileInfo: {
-    display:       'flex',
-    flexDirection: 'column',
-    gap:           '4px',
-  },
-  heading: {
-    fontSize:   '22px',
-    fontWeight: '700',
-    color:      '#0d2137',
-    margin:     0,
-  },
-  subheading: {
-    fontSize: '14px',
-    color:    '#6b7c93',
-    margin:   0,
-  },
-  roleBadge: {
-    display:      'inline-block',
-    padding:      '3px 10px',
-    background:   '#e8f4fd',
-    color:        '#1a3c5e',
-    borderRadius: '20px',
-    fontSize:     '12px',
-    fontWeight:   '600',
-    width:        'fit-content',
-  },
-
-  // ── Info Grid ──
-  infoGrid: {
-    display:             'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap:                 '12px',
-  },
-  infoItem: {
-    display:       'flex',
-    flexDirection: 'column',
-    gap:           '4px',
-    padding:       '14px',
-    background:    '#f8fafc',
-    borderRadius:  '8px',
-    border:        '1px solid #e8ecf0',
-  },
-  infoLabel: {
-    fontSize:      '11px',
-    fontWeight:    '600',
-    color:         '#8a9bb0',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  infoValue: {
-    fontSize:   '14px',
-    fontWeight: '500',
-    color:      '#1a2e44',
-  },
-
-  // ── Stats ──
-  statsRow: {
-    display:             'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
-    gap:                 '16px',
-  },
-  statCard: {
-    background:     '#ffffff',
-    borderRadius:   '12px',
-    padding:        '20px',
-    boxShadow:      '0 2px 12px rgba(0,0,0,0.08)',
-    display:        'flex',
-    flexDirection:  'column',
-    alignItems:     'center',
-    gap:            '6px',
-    textAlign:      'center',
-  },
-  statIcon:  { fontSize: '24px' },
-  statValue: { fontSize: '24px', fontWeight: '700' },
-  statLabel: { fontSize: '12px', color: '#8a9bb0', fontWeight: '500' },
-
-  // ── Categories ──
-  sectionTitle: {
-    fontSize:     '18px',
-    fontWeight:   '700',
-    color:        '#0d2137',
-    margin:       '0 0 6px',
-  },
-  sectionSubtitle: {
-    fontSize:     '13px',
-    color:        '#8a9bb0',
-    margin:       '0 0 20px',
-  },
-  categoryGrid: {
-    display:             'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap:                 '16px',
-  },
-  categoryCard: {
-    padding:       '20px',
-    background:    '#f8fafc',
-    borderRadius:  '10px',
-    border:        '1px solid #e8ecf0',
-    display:       'flex',
-    flexDirection: 'column',
-    gap:           '6px',
-    alignItems:    'flex-start',
-  },
-  categoryIcon:  { fontSize: '28px' },
-  categoryTitle: { fontSize: '15px', fontWeight: '700', color: '#1a2e44', margin: 0 },
-  categoryDesc:  { fontSize: '12px', color: '#8a9bb0', margin: 0 },
-  comingSoonTag: {
-    marginTop:    '8px',
-    padding:      '3px 8px',
-    background:   '#fff3cd',
-    color:        '#856404',
-    borderRadius: '4px',
-    fontSize:     '11px',
-    fontWeight:   '600',
-  },
-
-  // ── Features ──
-  featureList: {
-    display:       'flex',
-    flexDirection: 'column',
-    gap:           '12px',
-  },
-  featureItem: {
-    display:    'flex',
-    alignItems: 'center',
-    gap:        '12px',
-    padding:    '12px',
-    background: '#f8fafc',
-    borderRadius: '8px',
-    border:     '1px solid #e8ecf0',
-  },
-  featureIcon: { fontSize: '20px' },
-  featureText: { fontSize: '14px', color: '#4a5568' },
-
-  // ── Logout ──
-  logoutBtnLarge: {
-    width:        '100%',
-    padding:      '13px',
-    background:   '#e74c3c',
-    border:       'none',
-    borderRadius: '8px',
-    color:        '#ffffff',
-    fontSize:     '15px',
-    fontWeight:   '600',
-    cursor:       'pointer',
-    fontFamily:   "'DM Sans', sans-serif",
-  },
+const navStyle = {
+  height: '60px', background: '#1a3c5e', display: 'flex', alignItems: 'center',
+  padding: '0 28px', justifyContent: 'space-between',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.15)', position: 'sticky', top: 0, zIndex: 100,
+};
+const navBtnStyle = {
+  padding: '7px 14px', background: 'rgba(255,255,255,0.15)',
+  border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px',
+  color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer', fontFamily: "'Outfit', sans-serif",
+};
+const cardStyle = {
+  background: '#fff', borderRadius: '12px', border: '1px solid #e8ecf0',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.05)', padding: '24px',
 };
 
 export default ProviderDashboard;
