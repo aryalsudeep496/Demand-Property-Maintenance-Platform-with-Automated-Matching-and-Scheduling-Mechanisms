@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { usersAPI } from '../../utils/requestsAPI';
 import AppNavbar from '../../components/AppNavbar';
+import LocationPicker from '../../components/LocationPicker';
 
 const NAV_LINKS = [
   { to: '/provider/dashboard', label: 'Home',      icon: '🏠' },
@@ -37,6 +38,9 @@ const ProviderProfilePage = () => {
     skills:             [],
     availabilityRadius: 25,
     isAvailable:        true,
+    serviceAreaLat:     null,
+    serviceAreaLng:     null,
+    serviceAreaCity:    '',
   });
   const [skillInput, setSkillInput] = useState('');
 
@@ -46,6 +50,8 @@ const ProviderProfilePage = () => {
         const res = await usersAPI.getProfile();
         const u   = res.data.data;
         const pp  = u.providerProfile || {};
+        const coords = pp.location?.coordinates;
+        const hasCoords = coords && (coords[0] !== 0 || coords[1] !== 0);
         setForm({
           firstName:          u.firstName          || '',
           lastName:           u.lastName           || '',
@@ -56,6 +62,9 @@ const ProviderProfilePage = () => {
           skills:             pp.skills            || [],
           availabilityRadius: pp.availabilityRadius ?? 25,
           isAvailable:        pp.isAvailable       ?? true,
+          serviceAreaLat:     hasCoords ? coords[1] : null,   // GeoJSON: [lng, lat]
+          serviceAreaLng:     hasCoords ? coords[0] : null,
+          serviceAreaCity:    pp.serviceAreaCity   || '',
         });
       } catch (err) {
         setServerError('Failed to load profile.');
@@ -107,6 +116,13 @@ const ProviderProfilePage = () => {
         skills:             form.skills,
         bio:                form.bio,
         availabilityRadius: form.availabilityRadius,
+        ...(form.serviceAreaLat && form.serviceAreaLng ? {
+          serviceAreaLocation: {
+            type:        'Point',
+            coordinates: [form.serviceAreaLng, form.serviceAreaLat],  // GeoJSON: [lng, lat]
+          },
+          serviceAreaCity: form.serviceAreaCity,
+        } : {}),
       });
       if (updateUser) updateUser(res.data.data);
       setSuccessMsg('Profile updated successfully!');
@@ -337,26 +353,56 @@ const ProviderProfilePage = () => {
             )}
           </div>
 
-          {/* Availability radius */}
+          {/* Service area — map + radius */}
           <div style={cardStyle}>
-            <h2 style={sectionTitleStyle}>Service Radius</h2>
-            <p style={{ fontSize: '13px', color: '#6b7c93', margin: '0 0 16px' }}>
-              Set how far you are willing to travel for jobs.
+            <h2 style={sectionTitleStyle}>Service Area</h2>
+            <p style={{ fontSize: '13px', color: '#6b7c93', margin: '0 0 4px' }}>
+              Pin your base location on the map, then set your service radius.
+              You will only receive jobs posted within this area.
             </p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-              <input
-                type="range"
-                min={1}
-                max={100}
-                value={form.availabilityRadius}
-                onChange={e => setForm(f => ({ ...f, availabilityRadius: Number(e.target.value) }))}
-                style={{ flex: 1, minWidth: '180px', accentColor: '#C17B2A', cursor: 'pointer' }}
-              />
-              <div style={{ textAlign: 'center', minWidth: '72px' }}>
-                <span style={{ fontSize: '28px', fontWeight: '800', color: '#C17B2A' }}>{form.availabilityRadius}</span>
-                <span style={{ fontSize: '14px', color: '#6b7c93', display: 'block' }}>km</span>
+            {form.serviceAreaCity && (
+              <p style={{ fontSize: '13px', color: '#1a3c5e', fontWeight: '600', margin: '0 0 12px' }}>
+                📍 Current area: {form.serviceAreaCity} · {form.availabilityRadius} km radius
+              </p>
+            )}
+
+            <LocationPicker
+              value={form.serviceAreaLat ? { lat: form.serviceAreaLat, lng: form.serviceAreaLng } : null}
+              onChange={(loc) => setForm(f => ({
+                ...f,
+                serviceAreaLat:  loc.lat,
+                serviceAreaLng:  loc.lng,
+                serviceAreaCity: loc.city || f.serviceAreaCity,
+              }))}
+              height="280px"
+              showRadius
+              radiusKm={form.availabilityRadius}
+              onRadiusChange={(km) => setForm(f => ({ ...f, availabilityRadius: km }))}
+            />
+
+            {/* Radius slider below map */}
+            <div style={{ marginTop: '16px' }}>
+              <label style={{ ...labelStyle, marginBottom: '10px', display: 'block' }}>
+                Service Radius: <span style={{ color: '#C17B2A', fontWeight: '800' }}>{form.availabilityRadius} km</span>
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <input
+                  type="range"
+                  min={1}
+                  max={100}
+                  value={form.availabilityRadius}
+                  onChange={e => setForm(f => ({ ...f, availabilityRadius: Number(e.target.value) }))}
+                  style={{ flex: 1, accentColor: '#C17B2A', cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: '13px', color: '#6b7c93', minWidth: '30px' }}>100 km</span>
               </div>
             </div>
+
+            {!form.serviceAreaLat && (
+              <p style={{ fontSize: '12px', color: '#e67e22', marginTop: '10px', fontWeight: '600' }}>
+                ⚠ No service area set yet — only matching jobs will be shown after you save a location.
+              </p>
+            )}
           </div>
 
           {/* Save button */}

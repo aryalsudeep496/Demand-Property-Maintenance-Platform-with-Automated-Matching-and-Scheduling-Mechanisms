@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { requestsAPI, CATEGORIES } from '../../utils/requestsAPI';
 import AppNavbar from '../../components/AppNavbar';
+import LocationPicker from '../../components/LocationPicker';
 
 const NAV_LINKS = [
   { to: '/dashboard',            label: 'Home',         icon: '🏠' },
@@ -88,6 +89,8 @@ const NewRequestPage = () => {
     address:       '',
     city:          '',
     postcode:      '',
+    lat:           null,
+    lng:           null,
     preferredDate: '',
   });
 
@@ -111,9 +114,10 @@ const NewRequestPage = () => {
 
   const validateStep2 = () => {
     const e = {};
-    if (!form.address)  e.address  = 'Address is required';
-    if (!form.city)     e.city     = 'City is required';
-    if (!form.postcode) e.postcode = 'Postcode is required';
+    if (!form.lat || !form.lng) e.location = 'Please pin your location on the map';
+    if (!form.address)          e.address  = 'Street address is required';
+    if (!form.city)             e.city     = 'City is required';
+    if (!form.postcode)         e.postcode = 'Postcode is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -141,6 +145,10 @@ const NewRequestPage = () => {
           address:  form.address,
           city:     form.city,
           postcode: form.postcode,
+          coordinates: {
+            type:        'Point',
+            coordinates: [form.lng, form.lat],   // GeoJSON: [lng, lat]
+          },
         },
         preferredDate: form.preferredDate || undefined,
       };
@@ -306,14 +314,42 @@ const NewRequestPage = () => {
           ════════════════════════════════ */}
           {step === 2 && (
             <div>
-              <h2 style={{ fontSize: '16px', fontWeight: '700', color: '#1a2e44', margin: '0 0 20px' }}>Where is the service needed?</h2>
+              <h2 style={{ fontSize: '16px', fontWeight: '700', color: '#1a2e44', margin: '0 0 4px' }}>Where is the service needed?</h2>
+              <p style={{ fontSize: '13px', color: '#6b7c93', margin: '0 0 18px' }}>
+                Pin your location on the map — the address fields will fill in automatically.
+              </p>
 
+              {/* Map picker */}
+              <div style={{ marginBottom: '16px' }}>
+                <LocationPicker
+                  value={form.lat ? { lat: form.lat, lng: form.lng } : null}
+                  onChange={(loc) => {
+                    setForm(prev => ({
+                      ...prev,
+                      lat:      loc.lat,
+                      lng:      loc.lng,
+                      address:  loc.address  || prev.address,
+                      city:     loc.city     || prev.city,
+                      postcode: loc.postcode || prev.postcode,
+                    }));
+                    if (errors.location || errors.address || errors.city || errors.postcode) {
+                      setErrors(prev => ({ ...prev, location: '', address: '', city: '', postcode: '' }));
+                    }
+                  }}
+                  height="280px"
+                />
+                {errors.location && (
+                  <p style={{ fontSize: '12px', color: '#e74c3c', margin: '6px 0 0' }}>⚠ {errors.location}</p>
+                )}
+              </div>
+
+              {/* Auto-filled fields (editable) */}
               <Field label="Street Address" required error={errors.address}>
                 <input
                   type="text"
                   value={form.address}
                   onChange={e => set('address', e.target.value)}
-                  placeholder="e.g. 42 High Street"
+                  placeholder="Auto-filled from map — or type manually"
                   style={inputStyle(!!errors.address)}
                 />
               </Field>
@@ -324,7 +360,7 @@ const NewRequestPage = () => {
                     type="text"
                     value={form.city}
                     onChange={e => set('city', e.target.value)}
-                    placeholder="e.g. Glasgow"
+                    placeholder="Auto-filled from map"
                     style={inputStyle(!!errors.city)}
                   />
                 </Field>
@@ -333,7 +369,7 @@ const NewRequestPage = () => {
                     type="text"
                     value={form.postcode}
                     onChange={e => set('postcode', e.target.value.toUpperCase())}
-                    placeholder="e.g. G1 1AA"
+                    placeholder="Auto-filled from map"
                     style={inputStyle(!!errors.postcode)}
                   />
                 </Field>

@@ -47,6 +47,7 @@ const serviceProviderProfileSchema = new mongoose.Schema({
     type: { type: String, enum: ['Point'], default: 'Point' },
     coordinates: { type: [Number], default: [0, 0] },
   },
+  serviceAreaCity: { type: String, trim: true },
   isVerified:    { type: Boolean, default: false },
   averageRating: { type: Number, default: 0, min: 0, max: 5 },
   totalReviews:  { type: Number, default: 0 },

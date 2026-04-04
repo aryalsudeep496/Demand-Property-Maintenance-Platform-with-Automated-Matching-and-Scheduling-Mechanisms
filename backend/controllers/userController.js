@@ -27,6 +27,7 @@ const updateProfile = async (req, res) => {
       firstName, lastName, phone,
       businessName, serviceCategories,
       skills, bio, availabilityRadius,
+      serviceAreaLocation, serviceAreaCity,
     } = req.body;
 
     const user = await User.findById(req.user._id);
@@ -46,8 +47,11 @@ const updateProfile = async (req, res) => {
       if (skills              !== undefined) user.providerProfile.skills              = skills;
       if (bio                 !== undefined) user.providerProfile.bio                 = bio;
       if (availabilityRadius  !== undefined) user.providerProfile.availabilityRadius  = availabilityRadius;
+      if (serviceAreaLocation !== undefined) user.providerProfile.location            = serviceAreaLocation;
+      if (serviceAreaCity     !== undefined) user.providerProfile.serviceAreaCity     = serviceAreaCity;
     }
 
+    if (user.role === 'provider') user.markModified('providerProfile');
     await user.save({ validateBeforeSave: true });
     console.log(`✏️  Profile updated: ${user.email}`);
 

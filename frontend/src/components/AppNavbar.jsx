@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import MiniChatPanel from './MiniChatPanel';
+import JobMatchPopup from './JobMatchPopup';
 
 /**
  * AppNavbar — shared navbar for all authenticated customer/provider pages.
@@ -22,6 +23,8 @@ const AppNavbar = ({ links = [], unreadCount = 0 }) => {
   const handleChatUnread = useCallback((n) => setChatUnread(n), []);
 
   return (
+    <>
+    <JobMatchPopup />
     <nav style={navStyle}>
       {/* ── Logo ── */}
       <Link
@@ -120,6 +123,7 @@ const AppNavbar = ({ links = [], unreadCount = 0 }) => {
         <button onClick={handleLogout} style={navBtnStyle}>🚪 Logout</button>
       </div>
     </nav>
+    </>
   );
 };
 

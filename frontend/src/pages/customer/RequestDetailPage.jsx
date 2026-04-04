@@ -250,11 +250,11 @@ const RequestDetailPage = () => {
   const isAdmin     = user?.role === 'admin';
   const isCustomer  = request.customer?._id === user?._id || request.customer === user?._id;
   const isProvider  = request.provider && (request.provider?._id === user?._id || request.provider === user?._id);
-  const canCancel   = isCustomer && ['pending', 'matched', 'scheduled'].includes(request.status);
-  const canStart    = isProvider && ['matched', 'scheduled'].includes(request.status);
-  const canComplete = isProvider && request.status === 'in_progress';
+  const canCancel   = user?.role === 'customer' && isCustomer && ['pending', 'matched', 'scheduled'].includes(request.status);
+  const canStart    = user?.role === 'provider' && isProvider && ['matched', 'scheduled'].includes(request.status);
+  const canComplete = user?.role === 'provider' && isProvider && request.status === 'in_progress';
   const canChat     = !['pending', 'cancelled'].includes(request.status) && request.provider;
-  const canReview   = isCustomer && request.status === 'completed' && !request.customerReview;
+  const canReview   = user?.role === 'customer' && isCustomer && request.status === 'completed' && !request.customerReview;
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f4f8', fontFamily: "'Outfit', sans-serif" }}>

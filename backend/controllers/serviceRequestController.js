@@ -23,15 +23,56 @@ const getNextAvailableSlot = (fromDate = new Date()) => {
 };
 
 // ─── Helper: find best matching provider ──────────────────────────────────────
-const findMatchingProvider = async (category, rejectedProviders = []) => {
-  return await User.findOne({
-    role:                              'provider',
-    isActive:                          true,
-    isEmailVerified:                   true,
-    'providerProfile.isAvailable':     true,
+// coordinates: [lng, lat] GeoJSON order, or null to skip geo filtering
+const findMatchingProvider = async (category, coordinates, rejectedProviders = []) => {
+  const baseQuery = {
+    role:                               'provider',
+    isActive:                           true,
+    isEmailVerified:                    true,
+    'providerProfile.isAvailable':      true,
     'providerProfile.serviceCategories': category,
     _id: { $nin: rejectedProviders },
-  }).sort({ 'providerProfile.averageRating': -1 });
+  };
+
+  // If request has coordinates and provider location is set, use geo matching
+  const hasCoords = coordinates && coordinates.length === 2 &&
+                    !(coordinates[0] === 0 && coordinates[1] === 0);
+
+  if (hasCoords) {
+    const [lng, lat] = coordinates;
+    const results = await User.aggregate([
+      {
+        $geoNear: {
+          near:          { type: 'Point', coordinates: [lng, lat] },
+          distanceField: 'distanceMeters',
+          maxDistance:   200000, // 200 km hard cap
+          spherical:     true,
+          query:         {
+            ...baseQuery,
+            // Only consider providers who have set a real location
+            'providerProfile.location.coordinates': { $ne: [0, 0] },
+          },
+        },
+      },
+      {
+        // Keep only providers whose service radius covers the request location
+        $match: {
+          $expr: {
+            $lte: [
+              '$distanceMeters',
+              { $multiply: ['$providerProfile.availabilityRadius', 1000] },
+            ],
+          },
+        },
+      },
+      { $sort: { 'providerProfile.averageRating': -1 } },
+      { $limit: 1 },
+    ]);
+    return results[0] || null;
+  }
+
+  // Fallback: no coordinates — match by category only
+  return await User.findOne(baseQuery).sort({ 'providerProfile.averageRating': -1 });
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -62,7 +103,8 @@ const createRequest = async (req, res) => {
     console.log(`📋 New service request created: ${request._id} by ${req.user.email}`);
 
     // ── Auto-match a provider ─────────────────────────────────────────────────
-    const provider = await findMatchingProvider(category);
+    const requestCoords = request.location?.coordinates?.coordinates || null;
+    const provider = await findMatchingProvider(category, requestCoords);
 
     const io = req.app.get('io');
 
@@ -440,14 +482,29 @@ const getAvailableRequests = async (req, res) => {
   try {
     const provider   = await User.findById(req.user._id);
     const categories = provider?.providerProfile?.serviceCategories || [];
+    const radiusKm   = provider?.providerProfile?.availabilityRadius || 25;
+    const locCoords  = provider?.providerProfile?.location?.coordinates;
 
-    const requests = await ServiceRequest.find({
+    const filter = {
       status:   { $in: ['pending', 'scheduled'] },
       category: { $in: categories },
       provider: null,
-    })
+    };
+
+    // If the provider has set a real location, only show jobs within their service area
+    const hasLocation = locCoords && !(locCoords[0] === 0 && locCoords[1] === 0);
+    if (hasLocation) {
+      filter['location.coordinates'] = {
+        $nearSphere: {
+          $geometry:    { type: 'Point', coordinates: locCoords },
+          $maxDistance: radiusKm * 1000,
+        },
+      };
+    }
+
+    const requests = await ServiceRequest.find(filter)
       .populate('customer', 'firstName lastName')
-      .sort({ urgency: -1, createdAt: 1 })
+      .sort(hasLocation ? {} : { urgency: -1, createdAt: 1 })
       .limit(20);
 
     return res.status(200).json({ success: true, data: requests });

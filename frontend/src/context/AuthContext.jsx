@@ -69,12 +69,15 @@ export const AuthProvider = ({ children }) => {
       }
       try {
         const { data } = await authAPI.getMe();
+        // Keep userId in sync in case it was missing (e.g., older session)
+        if (data.data?._id) sessionStorage.setItem('userId', data.data._id);
         dispatch({
           type: 'AUTH_SUCCESS',
           payload: { user: data.data, accessToken: token },
         });
       } catch {
         sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('userId');
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     };
@@ -99,6 +102,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const { data } = await authAPI.login(credentials);
       sessionStorage.setItem('accessToken', data.accessToken);
+      sessionStorage.setItem('userId', data.user._id);       // used for cross-tab token mismatch detection
       dispatch({
         type: 'AUTH_SUCCESS',
         payload: { user: data.user, accessToken: data.accessToken },
@@ -121,6 +125,7 @@ export const AuthProvider = ({ children }) => {
       // Always clear local state even if API call fails
     } finally {
       sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('userId');
       dispatch({ type: 'LOGOUT' });
     }
   }, []);

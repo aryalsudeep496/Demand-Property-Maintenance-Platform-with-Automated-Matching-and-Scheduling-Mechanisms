@@ -70,6 +70,26 @@ api.interceptors.response.use(
           { withCredentials: true }
         );
         const newToken = data.accessToken;
+
+        // ── Cross-tab session guard ─────────────────────────────────────────��
+        // The refreshToken cookie is shared across all tabs for this origin.
+        // If another tab logged in as a different user, the cookie gets
+        // overwritten and the refresh would return THEIR token.
+        // Detect this by comparing the token's embedded userId with the one
+        // stored in sessionStorage (which IS per-tab).
+        try {
+          const payload      = JSON.parse(atob(newToken.split('.')[1]));
+          const storedUserId = sessionStorage.getItem('userId');
+          if (storedUserId && payload.id && storedUserId !== payload.id) {
+            // Different user's token — clear this tab's session and re-login
+            sessionStorage.removeItem('accessToken');
+            sessionStorage.removeItem('userId');
+            window.location.href = '/auth/login';
+            return Promise.reject(new Error('Session conflict: please log in again.'));
+          }
+        } catch (_) { /* malformed token — let the backend reject it */ }
+        // ────────────────────────────────────────────────────────────────────
+
         sessionStorage.setItem('accessToken', newToken);
         processQueue(null, newToken);
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
@@ -77,6 +97,7 @@ api.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('userId');
         window.location.href = '/auth/login';
         return Promise.reject(refreshError);
       } finally {
