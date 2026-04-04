@@ -83,6 +83,7 @@ const toggleAvailability = async (req, res) => {
     }
 
     user.providerProfile.isAvailable = !user.providerProfile.isAvailable;
+    user.markModified('providerProfile');
     await user.save({ validateBeforeSave: false });
 
     const status = user.providerProfile.isAvailable ? 'available' : 'unavailable';

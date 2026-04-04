@@ -1,7 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
-import { AuthProvider }  from './context/AuthContext';
+import { AuthProvider }    from './context/AuthContext';
+import { SocketProvider }  from './context/SocketContext';
 import {
   ProtectedRoute,
   RoleRoute,
@@ -44,6 +45,7 @@ const App = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
+      <SocketProvider>
         <style>{`
           @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
           *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -233,6 +235,7 @@ const App = () => {
           <Route path="*"  element={<Navigate to="/auth/login" replace />} />
 
         </Routes>
+      </SocketProvider>
       </AuthProvider>
     </BrowserRouter>
   );

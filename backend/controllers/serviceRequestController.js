@@ -64,6 +64,8 @@ const createRequest = async (req, res) => {
     // ── Auto-match a provider ─────────────────────────────────────────────────
     const provider = await findMatchingProvider(category);
 
+    const io = req.app.get('io');
+
     if (provider) {
       request.provider      = provider._id;
       request.status        = 'matched';
@@ -72,6 +74,26 @@ const createRequest = async (req, res) => {
       await request.save();
       console.log(`✅ Auto-matched provider: ${provider.email}`);
       notifyRequestMatched(req.user._id, provider._id, request._id, title);
+
+      // ── Real-time socket notifications ──────────────────────────────────────
+      if (io) {
+        // Tell the provider they got a new job
+        io.to(`user:${provider._id}`).emit('job_matched', {
+          requestId:    request._id.toString(),
+          title,
+          message:      `New job matched: "${title}"`,
+          customerName: `${req.user.firstName} ${req.user.lastName}`,
+          role:         'provider',
+        });
+        // Tell the customer a provider was found
+        io.to(`user:${req.user._id}`).emit('job_matched', {
+          requestId:    request._id.toString(),
+          title,
+          message:      `Provider found for "${title}"`,
+          providerName: `${provider.firstName} ${provider.lastName}`,
+          role:         'customer',
+        });
+      }
     } else {
       // No provider available — schedule for next slot
       const scheduledDate    = getNextAvailableSlot(preferredDate);
@@ -81,6 +103,16 @@ const createRequest = async (req, res) => {
       console.log(`📅 No provider available — scheduled for: ${scheduledDate}`);
       notifyRequestCreated(req.user._id, request._id, title);
       notifyRequestScheduled(req.user._id, request._id, title, scheduledDate);
+
+      // Notify customer their request is scheduled
+      if (io) {
+        io.to(`user:${req.user._id}`).emit('request_scheduled', {
+          requestId:     request._id.toString(),
+          title,
+          message:       `No provider available now. Your request "${title}" has been scheduled.`,
+          scheduledDate: scheduledDate.toISOString(),
+        });
+      }
     }
 
     const populated = await ServiceRequest.findById(request._id)
@@ -302,11 +334,28 @@ const sendMessage = async (req, res) => {
 
     const newMsg = updated.messages[updated.messages.length - 1];
 
-    // Notify the other party
+    // Notify the other party (DB notification)
     const recipientId = isCustomer ? request.provider : request.customer;
     if (recipientId) {
       const senderName = `${req.user.firstName} ${req.user.lastName}`;
       notifyNewMessage(recipientId, request._id, request.title, senderName);
+    }
+
+    // ── Real-time socket: broadcast to everyone in the request room ──────────
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`request:${req.params.id}`).emit('new_message', {
+        _id:        newMsg._id,
+        content:    newMsg.content,
+        createdAt:  newMsg.createdAt,
+        requestId:  req.params.id,
+        sender: {
+          _id:       req.user._id.toString(),
+          firstName: req.user.firstName,
+          lastName:  req.user.lastName,
+          role:      req.user.role,
+        },
+      });
     }
 
     return res.status(201).json({ success: true, data: newMsg });

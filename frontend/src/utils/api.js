@@ -14,7 +14,7 @@ const api = axios.create({
 // ─── Request Interceptor – Attach Access Token ─────────────────────────────────
 api.interceptors.request.use(
   (config) => {
-    const accessToken = localStorage.getItem('accessToken');
+    const accessToken = sessionStorage.getItem('accessToken');
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
@@ -70,13 +70,13 @@ api.interceptors.response.use(
           { withCredentials: true }
         );
         const newToken = data.accessToken;
-        localStorage.setItem('accessToken', newToken);
+        sessionStorage.setItem('accessToken', newToken);
         processQueue(null, newToken);
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        localStorage.removeItem('accessToken');
+        sessionStorage.removeItem('accessToken');
         window.location.href = '/auth/login';
         return Promise.reject(refreshError);
       } finally {

@@ -1,19 +1,34 @@
 require('dotenv').config();
+const http         = require('http');
 const express      = require('express');
 const cors         = require('cors');
 const helmet       = require('helmet');
 const morgan       = require('morgan');
 const cookieParser = require('cookie-parser');
+const { Server }   = require('socket.io');
 
 const connectDB             = require('./config/db');
 const authRoutes            = require('./routes/authRoutes');
 const serviceRequestRoutes  = require('./routes/serviceRequestRoutes');
 const userRoutes            = require('./routes/userRoutes');
+const setupSocket           = require('./socket/socketHandler');
 
 // ─── Connect to MongoDB ────────────────────────────────────────────────────────
 connectDB();
 
-const app = express();
+const app    = express();
+const server = http.createServer(app);
+
+// ─── Socket.io ────────────────────────────────────────────────────────────────
+const io = new Server(server, {
+  cors: {
+    origin:      process.env.CLIENT_URL || 'http://localhost:3000',
+    credentials: true,
+    methods:     ['GET', 'POST'],
+  },
+});
+app.set('io', io);   // make accessible in controllers via req.app.get('io')
+setupSocket(io);
 
 // ─── Security middleware ───────────────────────────────────────────────────────
 app.use(helmet());
@@ -70,8 +85,9 @@ app.use((err, req, res, next) => {
 
 // ─── Start server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+  console.log(`🔌 Socket.io ready`);
 });
 
 module.exports = app;

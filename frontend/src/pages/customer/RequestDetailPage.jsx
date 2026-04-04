@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import { requestsAPI } from '../../utils/requestsAPI';
+import { playNotificationSound } from '../../components/NotificationToast';
 import { StatusBadge, UrgencyBadge, CategoryBadge, StarRating } from '../../components/common/StatusBadge';
 
 const CUSTOMER_NAV = [
@@ -54,6 +56,7 @@ const SectionTitle = ({ children }) => (
 const RequestDetailPage = () => {
   const { id }       = useParams();
   const { user }     = useAuth();
+  const { socket }   = useSocket();
   const location     = useLocation();
   const navigate     = useNavigate();
   const chatEndRef   = useRef(null);
@@ -86,6 +89,46 @@ const RequestDetailPage = () => {
 
   useEffect(() => { fetchRequest(); }, [fetchRequest]);
 
+  // ── Socket: join request room + listen for real-time messages ─────────────
+  useEffect(() => {
+    if (!socket || !id) return;
+
+    const joinRoom = () => socket.emit('join_request', id);
+    joinRoom();                       // join immediately
+    socket.on('connect', joinRoom);   // re-join if socket reconnects
+
+    const handleNewMessage = (msg) => {
+      const isFromMe = msg.sender?._id?.toString() === user?._id?.toString();
+      if (isFromMe) {
+        // Replace the optimistic temp message with the confirmed real one
+        setRequest(prev => {
+          if (!prev) return prev;
+          const tempIdx = prev.messages?.findIndex(m => m._id?.toString().startsWith('temp_'));
+          if (tempIdx === -1 || tempIdx === undefined) return prev;
+          const updated = [...prev.messages];
+          updated[tempIdx] = msg;
+          return { ...prev, messages: updated };
+        });
+        return;
+      }
+      playNotificationSound();
+      setRequest(prev => {
+        if (!prev) return prev;
+        const exists = prev.messages?.some(m => m._id?.toString() === msg._id?.toString());
+        if (exists) return prev;
+        return { ...prev, messages: [...(prev.messages || []), msg] };
+      });
+    };
+
+    socket.on('new_message', handleNewMessage);
+
+    return () => {
+      socket.emit('leave_request', id);
+      socket.off('connect', joinRoom);
+      socket.off('new_message', handleNewMessage);
+    };
+  }, [socket, id, user?._id]);
+
   // Auto-scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -94,12 +137,27 @@ const RequestDetailPage = () => {
   // ── Send message ─────────────────────────────────────────────────────────────
   const handleSendMessage = async () => {
     if (!message.trim()) return;
+    const content = message.trim();
+    setMessage('');
+
+    // Optimistic update — show message instantly in sender's UI
+    const tempId = `temp_${Date.now()}`;
+    const optimistic = {
+      _id:       tempId,
+      content,
+      createdAt: new Date().toISOString(),
+      sender:    { _id: user._id, firstName: user.firstName, lastName: user.lastName, role: user.role },
+    };
+    setRequest(prev => prev ? { ...prev, messages: [...(prev.messages || []), optimistic] } : prev);
+
     setSending(true);
     try {
-      await requestsAPI.sendMessage(id, message.trim());
-      setMessage('');
-      fetchRequest();
+      await requestsAPI.sendMessage(id, content);
+      // Socket delivers message to receiver; sender already has optimistic copy
     } catch (err) {
+      // Roll back optimistic message on failure
+      setRequest(prev => prev ? { ...prev, messages: prev.messages.filter(m => m._id !== tempId) } : prev);
+      setMessage(content);
       setErrorMsg(err.response?.data?.message || 'Failed to send message.');
     } finally {
       setSending(false);

@@ -4,7 +4,7 @@ import { authAPI } from '../utils/api';
 // ─── Initial State ─────────────────────────────────────────────────────────────
 const initialState = {
   user:            null,
-  accessToken:     localStorage.getItem('accessToken') || null,
+  accessToken:     sessionStorage.getItem('accessToken') || null,
   isLoading:       true,
   isAuthenticated: false,
   error:           null,
@@ -62,7 +62,7 @@ export const AuthProvider = ({ children }) => {
   // ── Bootstrap: verify stored token on app load ────────────────────────────
   useEffect(() => {
     const bootstrapAuth = async () => {
-      const token = localStorage.getItem('accessToken');
+      const token = sessionStorage.getItem('accessToken');
       if (!token) {
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
@@ -74,7 +74,7 @@ export const AuthProvider = ({ children }) => {
           payload: { user: data.data, accessToken: token },
         });
       } catch {
-        localStorage.removeItem('accessToken');
+        sessionStorage.removeItem('accessToken');
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     };
@@ -98,7 +98,7 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: 'AUTH_LOADING' });
     try {
       const { data } = await authAPI.login(credentials);
-      localStorage.setItem('accessToken', data.accessToken);
+      sessionStorage.setItem('accessToken', data.accessToken);
       dispatch({
         type: 'AUTH_SUCCESS',
         payload: { user: data.user, accessToken: data.accessToken },
@@ -120,7 +120,7 @@ export const AuthProvider = ({ children }) => {
     } catch {
       // Always clear local state even if API call fails
     } finally {
-      localStorage.removeItem('accessToken');
+      sessionStorage.removeItem('accessToken');
       dispatch({ type: 'LOGOUT' });
     }
   }, []);

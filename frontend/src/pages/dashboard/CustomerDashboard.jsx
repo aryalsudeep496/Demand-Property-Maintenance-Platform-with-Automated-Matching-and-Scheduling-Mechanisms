@@ -1,7 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import { requestsAPI, usersAPI, STATUS_CONFIG } from '../../utils/requestsAPI';
+import { ToastContainer, playNotificationSound } from '../../components/NotificationToast';
+import MiniChatPanel from '../../components/MiniChatPanel';
 
 const NAV_LINKS = [
   { to: '/dashboard',              label: 'Home',           icon: '🏠' },
@@ -15,12 +18,58 @@ const CustomerDashboard = () => {
   const navigate         = useNavigate();
   const location         = useLocation();
 
+  const { socket }    = useSocket();
+  const toastIdRef    = useRef(0);
+
   const [stats,        setStats]        = useState(null);
   const [recentReqs,   setRecentReqs]   = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [unreadCount,  setUnreadCount]  = useState(0);
+  const [toasts,       setToasts]       = useState([]);
+  const [chatOpen,     setChatOpen]     = useState(false);
+  const [chatUnread,   setChatUnread]   = useState(0);
 
   const handleLogout = async () => { await logout(); navigate('/auth/login'); };
+
+  const dismissToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const addToast = useCallback((toast) => {
+    const id = ++toastIdRef.current;
+    setToasts(prev => [...prev, { ...toast, id }]);
+    playNotificationSound();
+  }, []);
+
+  // ── Socket: listen for job match + schedule events ───────────────────────
+  useEffect(() => {
+    if (!socket) return;
+    const handleJobMatched = (data) => {
+      addToast({
+        icon:      '🎉',
+        title:     'Provider Matched!',
+        message:   data.message || `A provider has been matched to "${data.title}"`,
+        requestId: data.requestId,
+        role:      'customer',
+      });
+      setUnreadCount(c => c + 1);
+    };
+    const handleScheduled = (data) => {
+      addToast({
+        icon:      '📅',
+        title:     'Request Scheduled',
+        message:   data.message || `Your request has been scheduled.`,
+        requestId: data.requestId,
+        role:      'customer',
+      });
+    };
+    socket.on('job_matched',        handleJobMatched);
+    socket.on('request_scheduled',  handleScheduled);
+    return () => {
+      socket.off('job_matched',       handleJobMatched);
+      socket.off('request_scheduled', handleScheduled);
+    };
+  }, [socket, addToast]);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -56,6 +105,7 @@ const CustomerDashboard = () => {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f4f8', fontFamily: "'Outfit', sans-serif" }}>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* ── Navbar ── */}
       <nav style={navStyle}>
@@ -81,7 +131,30 @@ const CustomerDashboard = () => {
             </Link>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Chat icon */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => { setChatOpen(o => !o); setChatUnread(0); }}
+              style={{ position: 'relative', background: chatOpen ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', width: '36px', height: '36px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}
+              title="Messages"
+            >
+              💬
+              {chatUnread > 0 && (
+                <span style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#e74c3c', color: '#fff', borderRadius: '10px', padding: '1px 5px', fontSize: '10px', fontWeight: '800', lineHeight: 1.4 }}>
+                  {chatUnread}
+                </span>
+              )}
+            </button>
+            {chatOpen && (
+              <>
+                <div onClick={() => setChatOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 199 }} />
+                <div style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: '620px', zIndex: 200, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', borderRadius: '14px' }}>
+                  <MiniChatPanel requests={recentReqs} onUnread={n => setChatUnread(n)} />
+                </div>
+              </>
+            )}
+          </div>
           <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>👋 {user?.firstName}</span>
           <button onClick={handleLogout} style={navBtnStyle}>🚪 Logout</button>
         </div>
