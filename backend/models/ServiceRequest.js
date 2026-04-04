@@ -94,6 +94,9 @@ const serviceRequestSchema = new mongoose.Schema({
   matchAttempts:     { type: Number, default: 0 },
   lastMatchAt:       { type: Date,   default: null },
   rejectedProviders: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  // Offer tracking — job is offered to one provider at a time before assignment
+  offeredTo:         { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  offerExpiresAt:    { type: Date, default: null },
 
   // ── Chat ───────────────────────────────────────────────────────────────────
   messages: [messageSchema],

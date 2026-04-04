@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
+import { requestsAPI } from '../utils/requestsAPI';
 
-const AUTO_DISMISS_SECS = 30;
+const OFFER_SECS = 120; // 2 minutes to match the server auto-schedule timer
 
 const playBeep = () => {
   try {
@@ -13,7 +14,6 @@ const playBeep = () => {
     osc.connect(gain);
     gain.connect(ctx.destination);
 
-    // Two-tone alert: short high beep followed by a lower one
     osc.type = 'sine';
     osc.frequency.setValueAtTime(960, ctx.currentTime);
     osc.frequency.setValueAtTime(720, ctx.currentTime + 0.18);
@@ -25,82 +25,124 @@ const playBeep = () => {
 
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.4);
-  } catch (_) {
-    // AudioContext unavailable in some environments — silently skip
-  }
+  } catch (_) {}
 };
 
+const catIcon = (c) =>
+  ({ home_repair: '🔧', home_upgrade: '🏡', tech_digital: '💻' })[c] || '🛠️';
+
 const JobMatchPopup = () => {
-  const { user }        = useAuth();
-  const { socket }      = useSocket();
-  const navigate        = useNavigate();
+  const { user }   = useAuth();
+  const { socket } = useSocket();
+  const navigate   = useNavigate();
 
-  const [popup,     setPopup]     = useState(null);   // { requestId, title, customerName }
-  const [countdown, setCountdown] = useState(AUTO_DISMISS_SECS);
-  const timerRef    = useRef(null);
-  const countRef    = useRef(null);
+  const [popup,     setPopup]     = useState(null);    // { requestId, title, customerName, category, city }
+  const [countdown, setCountdown] = useState(OFFER_SECS);
+  const [accepting, setAccepting] = useState(false);
+  const [declining, setDeclining] = useState(false);
 
-  const dismiss = () => {
+  const autoTimer  = useRef(null);
+  const countTimer = useRef(null);
+
+  const clearTimers = () => {
+    clearTimeout(autoTimer.current);
+    clearInterval(countTimer.current);
+  };
+
+  const dismissSilent = () => {
     setPopup(null);
-    clearTimeout(timerRef.current);
-    clearInterval(countRef.current);
+    setAccepting(false);
+    setDeclining(false);
+    clearTimers();
   };
 
-  const handleAccept = () => {
-    const id = popup?.requestId;
-    dismiss();
-    if (id) navigate(`/provider/requests/${id}`);
+  const handleAccept = async () => {
+    if (!popup || accepting) return;
+    setAccepting(true);
+    clearTimers();
+    try {
+      await requestsAPI.acceptJob(popup.requestId);
+      const id = popup.requestId;
+      dismissSilent();
+      navigate(`/provider/requests/${id}`, {
+        state: { successMsg: 'Job accepted! You can now start work.' },
+      });
+    } catch (err) {
+      // Job may have been taken by another provider
+      const msg = err.response?.data?.message || '';
+      dismissSilent();
+      if (msg) {
+        // Brief toast — just dismiss, no UI for now; provider can browse the list
+        console.warn('Could not accept job:', msg);
+      }
+    }
   };
 
-  const handleIgnore = () => dismiss();
+  const handleIgnore = async () => {
+    if (!popup || declining) return;
+    setDeclining(true);
+    clearTimers();
+    const id = popup.requestId;
+    dismissSilent();
+    try {
+      await requestsAPI.declineOffer(id); // best-effort — records rejection
+    } catch (_) {}
+  };
 
   useEffect(() => {
     if (!socket || user?.role !== 'provider') return;
 
-    const onJobMatched = (data) => {
+    const onNewJob = (data) => {
       if (data.role !== 'provider') return;
-      setPopup({ requestId: data.requestId, title: data.title, customerName: data.customerName });
-      setCountdown(AUTO_DISMISS_SECS);
+      clearTimers();
+
+      setPopup({
+        requestId:    data.requestId,
+        title:        data.title,
+        customerName: data.customerName,
+        category:     data.category,
+        city:         data.city,
+      });
+      setCountdown(OFFER_SECS);
+      setAccepting(false);
+      setDeclining(false);
       playBeep();
 
-      // auto-dismiss
-      clearTimeout(timerRef.current);
-      clearInterval(countRef.current);
-
-      timerRef.current = setTimeout(() => dismiss(), AUTO_DISMISS_SECS * 1000);
-      countRef.current = setInterval(() => {
+      autoTimer.current  = setTimeout(() => dismissSilent(), OFFER_SECS * 1000);
+      countTimer.current = setInterval(() =>
         setCountdown(c => {
-          if (c <= 1) { clearInterval(countRef.current); return 0; }
+          if (c <= 1) { clearInterval(countTimer.current); return 0; }
           return c - 1;
-        });
-      }, 1000);
+        })
+      , 1000);
     };
 
-    socket.on('job_matched', onJobMatched);
+    socket.on('new_job_available', onNewJob);
     return () => {
-      socket.off('job_matched', onJobMatched);
-      clearTimeout(timerRef.current);
-      clearInterval(countRef.current);
+      socket.off('new_job_available', onNewJob);
+      clearTimers();
     };
   }, [socket, user?.role]); // eslint-disable-line
 
   if (!popup) return null;
 
+  const pct = (countdown / OFFER_SECS) * 100;
+
   return (
     <>
-      {/* Subtle backdrop */}
+      {/* Backdrop */}
       <div style={{
         position: 'fixed', inset: 0, zIndex: 900,
         background: 'rgba(0,0,0,0.35)',
         animation: 'fadeInBg 0.2s ease',
       }} />
 
-      {/* Popup card */}
+      {/* Card */}
       <div style={{
         position: 'fixed', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
         zIndex: 901,
-        width: '360px', maxWidth: 'calc(100vw - 32px)',
+        width: '380px', maxWidth: 'calc(100vw - 32px)',
         background: '#fff', borderRadius: '18px',
         boxShadow: '0 24px 64px rgba(0,0,0,0.28)',
         overflow: 'hidden',
@@ -108,23 +150,23 @@ const JobMatchPopup = () => {
         animation: 'popIn 0.25s cubic-bezier(0.175,0.885,0.32,1.275)',
       }}>
 
-        {/* Header strip */}
+        {/* Header */}
         <div style={{
           background: 'linear-gradient(135deg, #1a3c5e 0%, #2563a8 100%)',
           padding: '18px 22px 14px',
           display: 'flex', alignItems: 'flex-start', gap: '12px',
         }}>
           <div style={{
-            width: '44px', height: '44px', borderRadius: '50%',
+            width: '48px', height: '48px', borderRadius: '50%',
             background: 'rgba(255,255,255,0.15)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '22px', flexShrink: 0,
+            fontSize: '24px', flexShrink: 0,
           }}>
-            🔔
+            {catIcon(popup.category)}
           </div>
           <div>
             <p style={{ margin: 0, fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.65)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              New Job Matched
+              New Job Available
             </p>
             <h2 style={{ margin: '3px 0 0', fontSize: '17px', fontWeight: '800', color: '#fff', lineHeight: 1.25 }}>
               {popup.title}
@@ -134,50 +176,61 @@ const JobMatchPopup = () => {
 
         {/* Body */}
         <div style={{ padding: '16px 22px 20px' }}>
-          <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#4a5568' }}>
+          <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#4a5568' }}>
             <strong style={{ color: '#1a2e44' }}>Customer:</strong> {popup.customerName}
           </p>
-          <p style={{ margin: '0 0 18px', fontSize: '12px', color: '#8a9bb0' }}>
-            A customer has been matched to you. Accept to get started or ignore to skip.
+          {popup.city && (
+            <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#4a5568' }}>
+              <strong style={{ color: '#1a2e44' }}>Location:</strong> {popup.city}
+            </p>
+          )}
+          <p style={{ margin: '6px 0 14px', fontSize: '12px', color: '#8a9bb0' }}>
+            Accept to take this job, or ignore to pass on it.
           </p>
 
-          {/* Progress bar */}
-          <div style={{
-            height: '3px', borderRadius: '2px', background: '#e8ecf0', marginBottom: '16px', overflow: 'hidden',
-          }}>
+          {/* Countdown bar */}
+          <div style={{ height: '4px', borderRadius: '2px', background: '#e8ecf0', marginBottom: '4px', overflow: 'hidden' }}>
             <div style={{
-              height: '100%', borderRadius: '2px', background: '#C17B2A',
-              width: `${(countdown / AUTO_DISMISS_SECS) * 100}%`,
+              height: '100%', borderRadius: '2px',
+              background: pct > 33 ? '#C17B2A' : '#e74c3c',
+              width: `${pct}%`,
               transition: 'width 1s linear',
             }} />
           </div>
+          <p style={{ fontSize: '11px', color: '#8a9bb0', margin: '0 0 16px', textAlign: 'right' }}>
+            Expires in {countdown}s
+          </p>
 
           {/* Buttons */}
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               onClick={handleAccept}
+              disabled={accepting || declining}
               style={{
                 flex: 1, padding: '11px 0',
-                background: 'linear-gradient(135deg, #1a3c5e, #2563a8)',
+                background: (accepting || declining) ? '#8a9bb0' : 'linear-gradient(135deg, #27ae60, #1e8449)',
                 color: '#fff', border: 'none', borderRadius: '10px',
-                fontSize: '14px', fontWeight: '700', cursor: 'pointer',
+                fontSize: '14px', fontWeight: '700',
+                cursor: (accepting || declining) ? 'not-allowed' : 'pointer',
                 fontFamily: "'Outfit', sans-serif",
-                boxShadow: '0 4px 12px rgba(26,60,94,0.3)',
+                boxShadow: (accepting || declining) ? 'none' : '0 4px 12px rgba(39,174,96,0.3)',
               }}
             >
-              ✓ Accept Job
+              {accepting ? 'Accepting…' : '✓ Accept Job'}
             </button>
             <button
               onClick={handleIgnore}
+              disabled={accepting || declining}
               style={{
                 flex: 1, padding: '11px 0',
                 background: '#f0f4f8', color: '#4a5568',
                 border: '1.5px solid #dde3eb', borderRadius: '10px',
-                fontSize: '14px', fontWeight: '700', cursor: 'pointer',
+                fontSize: '14px', fontWeight: '700',
+                cursor: (accepting || declining) ? 'not-allowed' : 'pointer',
                 fontFamily: "'Outfit', sans-serif",
               }}
             >
-              Ignore ({countdown}s)
+              {declining ? 'Passing…' : 'Ignore'}
             </button>
           </div>
         </div>

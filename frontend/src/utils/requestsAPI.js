@@ -30,6 +30,18 @@ export const requestsAPI = {
   sendMessage: (id, content) =>
     api.post(`/requests/${id}/messages`, { content }),
 
+  // Provider accepts a system-generated offer
+  acceptOffer: (id) =>
+    api.post(`/requests/${id}/accept-offer`),
+
+  // Provider declines a system-generated offer (triggers search for next provider)
+  declineOffer: (id) =>
+    api.post(`/requests/${id}/decline-offer`),
+
+  // Provider self-assigns to an available job from browse list
+  acceptJob: (id) =>
+    api.post(`/requests/${id}/accept`),
+
   // Submit a star review after job completed
   // data: { rating, comment }
   submitReview: (id, data) =>

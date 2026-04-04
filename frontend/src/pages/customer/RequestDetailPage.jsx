@@ -252,7 +252,7 @@ const RequestDetailPage = () => {
   const isProvider  = request.provider && (request.provider?._id === user?._id || request.provider === user?._id);
   const canCancel   = user?.role === 'customer' && isCustomer && ['pending', 'matched', 'scheduled'].includes(request.status);
   const canStart    = user?.role === 'provider' && isProvider && ['matched', 'scheduled'].includes(request.status);
-  const canComplete = user?.role === 'provider' && isProvider && request.status === 'in_progress';
+  const canComplete = user?.role === 'customer' && isCustomer && request.status === 'in_progress';
   const canChat     = !['pending', 'cancelled'].includes(request.status) && request.provider;
   const canReview   = user?.role === 'customer' && isCustomer && request.status === 'completed' && !request.customerReview;
 

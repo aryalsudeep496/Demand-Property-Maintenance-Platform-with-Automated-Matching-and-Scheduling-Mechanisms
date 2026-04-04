@@ -11,6 +11,9 @@ const {
   updateStatus,
   sendMessage,
   submitReview,
+  acceptOffer,
+  declineOffer,
+  acceptJob,
   getAvailableRequests,
   adminGetAllRequests,
 } = require('../controllers/serviceRequestController');
@@ -150,6 +153,20 @@ router.post(
   validateMessage,
   handleValidationErrors,
   sendMessage
+);
+
+// Accept a system-generated offer
+router.post('/:id/accept-offer',  protect, restrictTo('provider'), acceptOffer);
+
+// Decline a system-generated offer (find next provider)
+router.post('/:id/decline-offer', protect, restrictTo('provider'), declineOffer);
+
+// Accept a job from the browse list (provider self-assigns)
+router.post(
+  '/:id/accept',
+  protect,
+  restrictTo('provider'),
+  acceptJob
 );
 
 // Submit a review
