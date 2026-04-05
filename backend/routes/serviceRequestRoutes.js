@@ -15,6 +15,7 @@ const {
   declineOffer,
   acceptJob,
   getAvailableRequests,
+  addProgressUpdate,
   adminGetAllRequests,
 } = require('../controllers/serviceRequestController');
 
@@ -167,6 +168,16 @@ router.post(
   protect,
   restrictTo('provider'),
   acceptJob
+);
+
+// Add a progress update (provider only, job must be in_progress)
+router.post(
+  '/:id/progress',
+  protect,
+  restrictTo('provider'),
+  body('message').trim().isLength({ min: 1, max: 1000 }).withMessage('Message must be 1–1000 characters'),
+  handleValidationErrors,
+  addProgressUpdate
 );
 
 // Submit a review

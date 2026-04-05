@@ -1,5 +1,12 @@
 const mongoose = require('mongoose');
 
+// ─── Progress update sub-schema ───────────────────────────────────────────────
+const progressUpdateSchema = new mongoose.Schema({
+  message:    { type: String, required: true, trim: true, maxlength: 1000 },
+  addedBy:    { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  addedByRole:{ type: String, enum: ['provider', 'admin'], required: true },
+}, { timestamps: true });
+
 // ─── Chat message sub-schema ───────────────────────────────────────────────────
 const messageSchema = new mongoose.Schema({
   sender:     { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -97,6 +104,9 @@ const serviceRequestSchema = new mongoose.Schema({
   // Offer tracking — job is offered to one provider at a time before assignment
   offeredTo:         { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   offerExpiresAt:    { type: Date, default: null },
+
+  // ── Progress updates (provider posts while in_progress) ────────────────────
+  progressUpdates: [progressUpdateSchema],
 
   // ── Chat ───────────────────────────────────────────────────────────────────
   messages: [messageSchema],

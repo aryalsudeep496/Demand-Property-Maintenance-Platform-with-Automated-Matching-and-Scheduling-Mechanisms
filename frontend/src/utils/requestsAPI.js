@@ -42,6 +42,10 @@ export const requestsAPI = {
   acceptJob: (id) =>
     api.post(`/requests/${id}/accept`),
 
+  // Provider posts a progress update while job is in_progress
+  addProgress: (id, message) =>
+    api.post(`/requests/${id}/progress`, { message }),
+
   // Submit a star review after job completed
   // data: { rating, comment }
   submitReview: (id, data) =>

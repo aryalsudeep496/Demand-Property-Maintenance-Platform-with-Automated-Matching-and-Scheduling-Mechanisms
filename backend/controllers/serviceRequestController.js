@@ -618,6 +618,65 @@ const getAvailableRequests = async (req, res) => {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ADD PROGRESS UPDATE  (provider posts a work update while job is in_progress)
+// @route  POST /api/requests/:id/progress
+// @access Provider
+// ══════════════════════════════════════════════════════════════════════════════
+const addProgressUpdate = async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message?.trim()) {
+      return res.status(400).json({ success: false, message: 'Progress message is required.' });
+    }
+
+    const request = await ServiceRequest.findById(req.params.id);
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'Request not found.' });
+    }
+
+    // Only the assigned provider can post updates
+    if (!request.provider || request.provider.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Only the assigned provider can post progress updates.' });
+    }
+
+    if (request.status !== 'in_progress') {
+      return res.status(400).json({ success: false, message: 'Progress updates can only be added while the job is in progress.' });
+    }
+
+    request.progressUpdates.push({
+      message:     message.trim(),
+      addedBy:     req.user._id,
+      addedByRole: 'provider',
+    });
+    await request.save();
+
+    const newUpdate = request.progressUpdates[request.progressUpdates.length - 1];
+
+    // Real-time: broadcast to request room so customer sees it instantly
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`request:${req.params.id}`).emit('progress_update', {
+        _id:         newUpdate._id,
+        message:     newUpdate.message,
+        addedByRole: newUpdate.addedByRole,
+        createdAt:   newUpdate.createdAt,
+        addedBy: {
+          _id:       req.user._id.toString(),
+          firstName: req.user.firstName,
+          lastName:  req.user.lastName,
+        },
+      });
+    }
+
+    return res.status(201).json({ success: true, data: newUpdate });
+
+  } catch (error) {
+    console.error('addProgressUpdate error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to add progress update.' });
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
 // ADMIN: GET ALL REQUESTS
 // @route  GET /api/requests
 // @access Admin
@@ -660,5 +719,6 @@ module.exports = {
   declineOffer,
   acceptJob,
   getAvailableRequests,
+  addProgressUpdate,
   adminGetAllRequests,
 };
