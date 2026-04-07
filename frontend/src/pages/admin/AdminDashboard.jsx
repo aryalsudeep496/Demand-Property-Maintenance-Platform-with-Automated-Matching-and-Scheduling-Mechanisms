@@ -47,12 +47,14 @@ const AdminDashboard = () => {
     new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
   const STAT_CARDS = stats ? [
-    { icon: '👥', label: 'Total Users',     value: stats.totalUsers,        color: '#1a3c5e' },
-    { icon: '🔧', label: 'Providers',        value: stats.totalProviders,    color: '#C17B2A' },
-    { icon: '👤', label: 'Customers',        value: stats.totalCustomers,    color: '#2a7a4a' },
-    { icon: '📋', label: 'Total Requests',   value: stats.totalRequests,     color: '#1a3c5e' },
-    { icon: '✅', label: 'Completed',         value: stats.completedRequests, color: '#27ae60' },
-    { icon: '⏳', label: 'Pending',           value: stats.pendingRequests,   color: '#e67e22' },
+    { icon: '👥', label: 'Total Users',       value: stats.totalUsers,           color: '#1a3c5e' },
+    { icon: '🔧', label: 'Providers',          value: stats.totalProviders,       color: '#C17B2A' },
+    { icon: '🟢', label: 'Available',          value: stats.availableProviders,   color: '#27ae60' },
+    { icon: '🔴', label: 'Unavailable',        value: stats.unavailableProviders, color: '#e74c3c' },
+    { icon: '👤', label: 'Customers',          value: stats.totalCustomers,       color: '#2a7a4a' },
+    { icon: '📋', label: 'Total Requests',     value: stats.totalRequests,        color: '#1a3c5e' },
+    { icon: '✅', label: 'Completed',           value: stats.completedRequests,    color: '#27ae60' },
+    { icon: '⏳', label: 'Pending',             value: stats.pendingRequests,      color: '#e67e22' },
   ] : [];
 
   return (
@@ -94,13 +96,13 @@ const AdminDashboard = () => {
 
         {/* ── Stats grid ── */}
         {loading && !stats ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '14px', marginBottom: '28px' }}>
-            {[1,2,3,4,5,6].map(i => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '28px' }}>
+            {[1,2,3,4,5,6,7,8].map(i => (
               <div key={i} style={{ height: '90px', background: '#fff', borderRadius: '12px', border: '1px solid #e8ecf0', animation: 'pulse 1.5s ease-in-out infinite' }} />
             ))}
           </div>
         ) : stats && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '14px', marginBottom: '28px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '28px' }}>
             {STAT_CARDS.map(({ icon, label, value, color }) => (
               <div key={label} style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e8ecf0', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', padding: '18px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textAlign: 'center' }}>
                 <span style={{ fontSize: '22px' }}>{icon}</span>

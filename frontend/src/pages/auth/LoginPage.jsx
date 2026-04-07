@@ -43,6 +43,8 @@ const LoginPage = () => {
   const { login } = useAuth();
 
   const [serverError,     setServerError]     = useState('');
+  const [emailError,      setEmailError]      = useState('');
+  const [passwordError,   setPasswordError]   = useState('');
   const [infoMsg,         setInfoMsg]         = useState(location.state?.message || '');
   const [isSubmitting,    setIsSubmitting]    = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState('');
@@ -56,6 +58,8 @@ const LoginPage = () => {
 
   const onSubmit = async (data) => {
     setServerError('');
+    setEmailError('');
+    setPasswordError('');
     setInfoMsg('');
     setUnverifiedEmail('');
     setIsSubmitting(true);
@@ -72,10 +76,16 @@ const LoginPage = () => {
       };
       navigate(from || roleDashboards[result.user.role] || '/dashboard', { replace: true });
     } else {
-      if (result.code === 'EMAIL_NOT_VERIFIED') {
+      if (result.code === 'EMAIL_NOT_FOUND') {
+        setEmailError('No account found with this email address.');
+      } else if (result.code === 'WRONG_PASSWORD') {
+        setPasswordError(result.message || 'Wrong password.');
+      } else if (result.code === 'EMAIL_NOT_VERIFIED') {
         setUnverifiedEmail(result.data?.email || '');
+        setServerError(result.message || 'Login failed.');
+      } else {
+        setServerError(result.message || 'Login failed.');
       }
-      setServerError(result.message || 'Login failed.');
     }
   };
 
@@ -106,11 +116,12 @@ const LoginPage = () => {
               placeholder="you@example.com"
               autoComplete="email"
               aria-invalid={!!errors.email}
-              style={{ paddingLeft: '42px', ...(errors.email ? { borderColor: '#e74c3c' } : {}) }}
+              style={{ paddingLeft: '42px', ...((errors.email || emailError) ? { borderColor: '#e74c3c' } : {}) }}
               {...register('email')}
             />
           </div>
           {errors.email && <p className="auth-form-error">⚠ {errors.email.message}</p>}
+          {emailError   && <p className="auth-form-error">⚠ {emailError}</p>}
         </div>
 
         {/* ── Password ── */}
@@ -128,7 +139,7 @@ const LoginPage = () => {
               placeholder="Your password"
               autoComplete="current-password"
               aria-invalid={!!errors.password}
-              style={{ paddingLeft: '42px', paddingRight: '44px', ...(errors.password ? { borderColor: '#e74c3c' } : {}) }}
+              style={{ paddingLeft: '42px', paddingRight: '44px', ...((errors.password || passwordError) ? { borderColor: '#e74c3c' } : {}) }}
               {...register('password')}
             />
             <button
@@ -140,7 +151,8 @@ const LoginPage = () => {
               {showPassword ? <EyeOff /> : <EyeOn />}
             </button>
           </div>
-          {errors.password && <p className="auth-form-error">⚠ {errors.password.message}</p>}
+          {errors.password  && <p className="auth-form-error">⚠ {errors.password.message}</p>}
+          {passwordError    && <p className="auth-form-error">⚠ {passwordError}</p>}
         </div>
 
         {/* ── Forgot password ── */}

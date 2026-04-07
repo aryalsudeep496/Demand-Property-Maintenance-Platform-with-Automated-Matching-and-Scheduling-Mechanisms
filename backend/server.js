@@ -11,6 +11,7 @@ const connectDB             = require('./config/db');
 const authRoutes            = require('./routes/authRoutes');
 const serviceRequestRoutes  = require('./routes/serviceRequestRoutes');
 const userRoutes            = require('./routes/userRoutes');
+const publicRoutes          = require('./routes/publicRoutes');
 const setupSocket           = require('./socket/socketHandler');
 
 // ─── Connect to MongoDB ────────────────────────────────────────────────────────
@@ -53,6 +54,7 @@ if (process.env.NODE_ENV === 'development') {
 app.use('/api/auth',     authRoutes);
 app.use('/api/requests', serviceRequestRoutes);
 app.use('/api/users',    userRoutes);
+app.use('/api/public',   publicRoutes);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

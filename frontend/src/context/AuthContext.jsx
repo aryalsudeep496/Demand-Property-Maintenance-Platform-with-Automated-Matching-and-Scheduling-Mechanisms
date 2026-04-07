@@ -98,7 +98,6 @@ export const AuthProvider = ({ children }) => {
 
   // ── Login ─────────────────────────────────────────────────────────────────
   const login = useCallback(async (credentials) => {
-    dispatch({ type: 'AUTH_LOADING' });
     try {
       const { data } = await authAPI.login(credentials);
       sessionStorage.setItem('accessToken', data.accessToken);
